@@ -21,11 +21,12 @@ namespace ExternalSort.Tests
             IdString.TryMakeIdString(in2, out o2);
             Assert.AreEqual(o2.ToString(), in2);
 
-            in1 = "23 Hello world!";
-            IdString.TryMakeIdString(in1, out o1);
-            Assert.AreEqual(default(IdString), in1);
-
             Assert.AreEqual(o1.Id, o2.Id);
+
+            in1 = "23 Hello world!";
+            IdString o3;
+            IdString.TryMakeIdString(in1, out o3);
+            Assert.AreEqual(default(IdString), o3);
         }
 
         [TestMethod]

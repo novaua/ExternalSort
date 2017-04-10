@@ -49,7 +49,7 @@ namespace ExternalSort.Tests
         public void TestEmptyFile()
         {
             var tmp = Path.GetTempFileName();
-            using (var myQueue = new AutoFileQueue(new StreamReader(_tempFile)))
+            using (var myQueue = new AutoFileQueue(new StreamReader(tmp)))
             {
                 Assert.IsFalse(myQueue.Any());
             }
