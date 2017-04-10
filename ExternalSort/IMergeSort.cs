@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace ExternalSort
 {
@@ -7,6 +8,6 @@ namespace ExternalSort
     {
         void MergeSortFile(string inputFile, string outputFile);
 
-        void MergeSortFiles(IList<string> files, long totalLines, string file, Comparison<string> linesEqualityComparer);
+        Task MergeSortFiles(IList<string> files, long totalLines, string file, Comparison<string> linesEqualityComparer);
     }
 }

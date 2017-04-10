@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,7 +11,7 @@ namespace ExternalSort
 {
     public class MergeSort : IMergeSort
     {
-        private int FileBufferSize = 32 * 1024;
+        private const int FileBufferSize = 32 * 1024;
 
         public MergeSort(Bounds bounds)
         {
@@ -21,10 +22,9 @@ namespace ExternalSort
 
         public void MergeSortFile(string inputFile, string outputFile)
         {
-            var files = Split(inputFile, Path.GetTempPath());
+            var files = Split(inputFile, Path.GetTempPath()).Result;
 
-            SortFiles(files.Item2, Comparator);
-            MergeSortFiles(files.Item2, files.Item1, outputFile, Comparator);
+            MergeSortFiles(files.Item2, files.Item1, outputFile, Comparator).Wait();
 
             foreach (var file in files.Item2)
             {
@@ -45,20 +45,7 @@ namespace ExternalSort
             return string.Compare(x, y, StringComparison.InvariantCulture);
         }
 
-        private void SortFiles(IList<string> files, Comparison<string> linesEqualityComparer)
-        {
-            foreach (var fileName in files)
-            {
-                using (new AutoStopwatch("Sorting file", new FileInfo(fileName).Length))
-                {
-                    var fileLines = File.ReadAllLines(fileName);
-                    Array.Sort(fileLines, linesEqualityComparer);
-                    File.WriteAllLines(fileName, fileLines, Encoding.UTF8);
-                }
-            }
-        }
-
-        public void MergeSortFiles(IList<string> files, long totalLines, string outputFile, Comparison<string> linesEqualityComparer)
+        public async Task MergeSortFiles(IList<string> files, long totalLines, string outputFile, Comparison<string> linesEqualityComparer)
         {
             if (files.Count == 1)
             {
@@ -74,17 +61,20 @@ namespace ExternalSort
 
             foreach (var file in files)
             {
-                var reader = new StreamReader(File.OpenRead(file), Encoding.UTF8);
-                
-                var autoQueue = new AutoFileQueue(reader, maxQueueRecords);
-                var top = autoQueue.Dequeue();
-                sortedChunks.Add(top, autoQueue);
+                var unzipStream = new GZipStream(OpenForAsyncRead(file), CompressionMode.Decompress);
+                var reader = new StreamReader(unzipStream, Encoding.UTF8);
 
-                totalSize += reader.BaseStream.Length;
+                using (var autoQueue = new AutoFileQueue(reader, maxQueueRecords))
+                {
+                    var top = autoQueue.Dequeue();
+                    sortedChunks.Add(top, autoQueue);
+
+                    totalSize += reader.BaseStream.Length;
+                }
             }
 
             using (new AutoStopwatch("Merge sorted files ", totalSize))
-            using (var sw = new StreamWriter(outputFile))
+            using (var sw = new StreamWriter(OpenForAsyncWrite(outputFile)))
             {
                 int progress = 0;
 
@@ -98,103 +88,88 @@ namespace ExternalSort
                     foreach (var line in NWayMerge(sortedChunks))
                     {
                         ++progress;
-                        sw.WriteLine(line);
+                        await sw.WriteLineAsync(line);
                     }
                 }
             }
         }
 
-        public Tuple<long, IList<string>> Split(string file, string tempLocationPath)
+        public async Task<string> LinesWriter(IList<string> lines)
         {
-            var bigInputFile = File.Open(file, FileMode.Open, FileAccess.Read, FileShare.Read);
-
-            var files = new List<string>();
             var tempFileName = Path.GetTempFileName();
-            files.Add(tempFileName);
 
-            var outputStream = new StreamWriter(tempFileName, false, Encoding.UTF8, FileBufferSize);
-            var asw = new AutoStopwatch("Creating file", (long)Bounds.MaxMemoryUsageBytes);
-            var lineCount = 0L;
-            try
+            var fs = OpenForAsyncWrite(tempFileName);
+            var gz = new GZipStream(fs, CompressionMode.Compress);
+            using (var stringStream = new StreamWriter(gz, Encoding.UTF8, FileBufferSize))
             {
-                using (var inputStream = new StreamReader(bigInputFile))
+                foreach (var line in lines)
                 {
-                    foreach (var chunks in ToLineChuncks(inputStream))
-                    {
-                        lineCount += chunks.Count;
-                        foreach (var line in chunks)
-                        {
-                            outputStream.WriteLine(line);
-                        }
-
-                        if (outputStream.BaseStream.Length >= (long)Bounds.MaxMemoryUsageBytes && inputStream.Peek() >= 0)
-                        {
-                            outputStream.Dispose();
-                            tempFileName = Path.GetTempFileName();
-                            files.Add(tempFileName);
-                            outputStream = new StreamWriter(tempFileName, false, Encoding.UTF8, FileBufferSize);
-                            asw.Dispose();
-                            asw = new AutoStopwatch("Creating file", (long)Bounds.MaxMemoryUsageBytes);
-                        }
-                    }
-
-                    if (lineCount > 0)
-                    {
-                        var bytesPerLine = bigInputFile.Length / lineCount;
-                        checked
-                        {
-                            Bounds.MaxQueueRecords = (int)((long)Bounds.MaxMemoryUsageBytes / bytesPerLine / files.Count / 4);
-                        }
-                    }
+                    await stringStream.WriteLineAsync(line);
                 }
             }
-            finally
+
+            return tempFileName;
+        }
+
+        public async Task<Tuple<long, IList<string>>> Split(string file, string tempLocationPath)
+        {
+            var files = new List<string>();
+
+            var writeTask = Task.CompletedTask;
+            var lineCount = 0L;
+            var countedList = new CountedList(Bounds.MaxMemoryUsageBytes / 2);
+            countedList.MaxIntemsReached += fullList =>
             {
-                outputStream.Dispose();
-                asw.Dispose();
+                writeTask.Wait();
+                var localList = countedList;
+                lineCount += countedList.Count;
+
+                writeTask =
+                Task.Factory.StartNew(() => localList.Sort())
+                .ContinueWith(async antecendent =>
+                        {
+                            using (new AutoStopwatch("Creating file", (long)Bounds.MaxMemoryUsageBytes))
+                            {
+                                files.Add(await LinesWriter(localList));
+                                Console.WriteLine($"File written '{files.Last()}'");
+                            }
+                        }
+                );
+
+                countedList = new CountedList(Bounds.MaxMemoryUsageBytes / 2);
+            };
+
+            var bigInputFile = OpenForAsyncRead(file);
+            using (var inputStream = new StreamReader(bigInputFile))
+            {
+                foreach (var line in await ReadLines(inputStream))
+                {
+                    countedList.Add(line);
+                }
+
+                if (lineCount > 0)
+                {
+                    var bytesPerLine = bigInputFile.Length / lineCount;
+                    checked
+                    {
+                        Bounds.MaxQueueRecords = (int)((long)Bounds.MaxMemoryUsageBytes / bytesPerLine / files.Count / 4);
+                    }
+                }
             }
 
             Console.WriteLine("{0} files created. Total lines {1}", files.Count, lineCount);
             return new Tuple<long, IList<string>>(lineCount, files);
         }
 
-        static async Task LoadQueue(Queue<string> queue, StreamReader file, int records)
+        private async Task<IList<string>> ReadLines(StreamReader reader, int maxCount = 1024)
         {
-            for (var i = 0; i < records; i++)
+            var result = new List<string>();
+            for (int i = 0; i < maxCount; i++)
             {
-                if (file.Peek() < 0)
-                {
-                    break;
-                }
-
-                queue.Enqueue(await file.ReadLineAsync());
+                result.Add(await reader.ReadLineAsync());
             }
-        }
 
-        private IEnumerable<List<string>> ToLineChuncks(StreamReader reader, int chunkSize = 1024)
-        {
-            var done = false;
-            while (!done)
-            {
-                var lb = new List<string>();
-                for (var i = 0u; i < chunkSize && !done; ++i)
-                {
-                    var line = reader.ReadLine();
-                    if (line != null)
-                    {
-                        lb.Add(line);
-                    }
-                    else
-                    {
-                        done = true;
-                    }
-                }
-
-                if (lb.Any())
-                {
-                    yield return lb;
-                }
-            }
+            return result;
         }
 
         private List<string> NWayMerge(IDictionary<string, AutoFileQueue> sortedChunks, int maxCount = 1024)
@@ -218,7 +193,7 @@ namespace ExternalSort
             for (var i = 0; i < maxCount && sortedChunks.Any(); i++)
             {
                 var top = sortedChunks.First();
-                
+
                 outList.Add(top.Key);
                 sortedChunks.Remove(top.Key);
 
@@ -238,11 +213,21 @@ namespace ExternalSort
                     newKey = queue.Dequeue();
                     ++i;
                 }
-                
+
                 sortedChunks.Add(newKey, queue);
             }
 
             return outList;
+        }
+
+        private static FileStream OpenForAsyncWrite(string fileName)
+        {
+            return new FileStream(fileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None, FileBufferSize, FileOptions.Asynchronous);
+        }
+
+        private static FileStream OpenForAsyncRead(string fileName)
+        {
+            return new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read, FileBufferSize, FileOptions.Asynchronous);
         }
     }
 }

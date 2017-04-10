@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Common;
 
 namespace ExternalSort.Tests
 {
     [TestClass]
-    public class UnitTest1
+    public class Generic
     {
         [TestMethod]
         public void TestMethod1()
@@ -34,6 +35,29 @@ namespace ExternalSort.Tests
             var testStringBytes = Encoding.UTF8.GetBytes(testString);
 
             Console.Write($"Count {testString.Length}, bytes {testStringBytes.Length}");
+        }
+
+        [TestMethod]
+        public void BytesFormat()
+        {
+            var varints = new[]
+            {
+                BytesFormatter.Format(0),
+                BytesFormatter.Format(1),
+                BytesFormatter.Format(100),
+                BytesFormatter.Format(1024),
+                BytesFormatter.Format(1025),
+                BytesFormatter.Format(7 * 1024 * 1024),
+                BytesFormatter.Format(58L * 1024 * 1024 * 1024),
+                BytesFormatter.Format(100500L * 1024 * 1024 * 1024),
+                BytesFormatter.Format(1022342342345),
+                BytesFormatter.Format(long.MaxValue),
+            };
+
+            foreach (var v in varints)
+            {
+                Console.WriteLine(v);
+            }
         }
     }
 }

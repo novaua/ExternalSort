@@ -19,6 +19,7 @@ namespace DataGenerator
         private const ulong DafaultSize = Mb;
         private const int OutFileBuffer = 128 * 1024;
         private const int ChunkSize = 128;
+        private const int MaxWordsInLine = 4;
 
         private const string DafaultOutput = "out.txt";
 
@@ -77,17 +78,9 @@ namespace DataGenerator
                 }
             }
 
-            try
-            {
-                var appSettings = ConfigurationManager.AppSettings;
-                var fullDictionary = File.ReadAllLines(appSettings["WordsFile"]);
-                GenerateFile(fullDictionary, outFile, outSize).Wait();
-            }
-            catch (ConfigurationErrorsException exception)
-            {
-                Console.WriteLine("Error reading application settings: {0}", exception.Message);
-                Console.WriteLine(exception.StackTrace);
-            }
+            var appSettings = ConfigurationManager.AppSettings;
+            var fullDictionary = File.ReadAllLines(appSettings["WordsFile"]);
+            GenerateFile(fullDictionary, outFile, outSize).Wait();
         }
 
         private static async Task GenerateFile(string[] dictionary, string fileName, ulong maxSize)
@@ -118,9 +111,15 @@ namespace DataGenerator
 
             for (var i = 0u; i < chunkCount; ++i)
             {
-                var nextWordId = rand.Next() % wordsCount;
+                var wordsLine = string.Empty;
+                for (var j = 0; j < rand.Next(1, MaxWordsInLine + 1); ++j)
+                {
+                    var nextWordId = rand.Next() % wordsCount;
+                    wordsLine += " " + dictionary[nextWordId];
+                }
+
                 var nextId = id + i;
-                sb.AppendLine($"{nextId}. {dictionary[nextWordId]}");
+                sb.AppendLine($"{nextId}. {wordsLine}");
             }
 
             return sb.ToString();

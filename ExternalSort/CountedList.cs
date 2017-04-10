@@ -12,7 +12,7 @@ namespace ExternalSort
             _maxItems = maxIntems;
         }
 
-        public Action<IList<string>> MaxIntemsReached;
+        public Action<List<string>> MaxIntemsReached;
 
         public new void Add(string item)
         {
