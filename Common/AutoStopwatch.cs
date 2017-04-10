@@ -29,7 +29,7 @@ namespace Common
             var bytesPerSecond = (WorkAmount > 0) ? (WorkAmount / time.TotalSeconds) : 0d;
 
             var msg = string.Format(CultureInfo.InvariantCulture,
-                    "{0} of '{1}' took : {2:F2} s, speed {3}/s",
+                    "{0} of {1} took : {2:F2} s, speed {3}/s",
                     _actionName,
                     BytesFormatter.Format(WorkAmount),
                     time.TotalSeconds,

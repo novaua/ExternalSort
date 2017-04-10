@@ -45,9 +45,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AutoFileQueue.cs" />
-    <Compile Include="Bounds.cs" />
-    <Compile Include="IdString.cs" />
-    <Compile Include="IMergeSort.cs" />
+    <Compile Include="Settings.cs" />
+    <Compile Include="LineComparer.cs" />
     <Compile Include="MergeSort.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

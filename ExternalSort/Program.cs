@@ -1,13 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ExternalSort
 {
-    class Program
+    public class Program
     {
         static void Main(string[] args)
         {
@@ -15,7 +11,7 @@ namespace ExternalSort
             if (args.Any() && helpVariant.Contains(args[0], StringComparer.OrdinalIgnoreCase))
             {
                 Console.WriteLine("Big files sorting tool" + Environment.NewLine +
-                                  "\tUsage ExternalSort <input file> <output file>" + Environment.NewLine +
+                                  "\tUsage ExternalSort <input file> <output file> [/ord[inal]]" + Environment.NewLine +
                                   "\tExample: " + Environment.NewLine +
                                   "\tExternalSort.exe in.txt outSorted.txt" + Environment.NewLine);
                 return;
@@ -23,11 +19,16 @@ namespace ExternalSort
 
             var imputFile = string.Empty;
             var outputFile = string.Empty;
+            var option = string.Empty;
 
-            if (args.Length == 2)
+            if (args.Length >= 2)
             {
                 imputFile = args[0];
                 outputFile = args[1];
+                if (args.Length == 3)
+                {
+                    option = args[2];
+                }
             }
             else
             {
@@ -35,7 +36,12 @@ namespace ExternalSort
                 return;
             }
 
-            var ms = new MergeSort(new Bounds());
+            var ms = new MergeSort(
+                new Settings
+                {
+                    OrdinalStringSortOrder = option.StartsWith("/ord")
+                });
+
             ms.MergeSortFile(imputFile, outputFile);
         }
     }

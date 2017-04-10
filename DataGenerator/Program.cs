@@ -66,7 +66,6 @@ namespace DataGenerator
                     return;
                 }
 
-                Console.WriteLine("Generation file {0}", BytesFormatter.Format(outSize));
                 if (args.Length == 2)
                 {
                     outFile = args[1];
@@ -77,6 +76,8 @@ namespace DataGenerator
                     return;
                 }
             }
+
+            Console.WriteLine("Generation file {0}", BytesFormatter.Format(outSize));
 
             var appSettings = ConfigurationManager.AppSettings;
             var fullDictionary = File.ReadAllLines(appSettings["WordsFile"]);
@@ -111,15 +112,16 @@ namespace DataGenerator
 
             for (var i = 0u; i < chunkCount; ++i)
             {
-                var wordsLine = string.Empty;
+                var wordsList = new List<string>();
                 for (var j = 0; j < rand.Next(1, MaxWordsInLine + 1); ++j)
                 {
                     var nextWordId = rand.Next() % wordsCount;
-                    wordsLine += " " + dictionary[nextWordId];
+                    wordsList.Add(dictionary[nextWordId]);
                 }
 
+                var worsdLine = string.Join(" ", wordsList);
                 var nextId = id + i;
-                sb.AppendLine($"{nextId}. {wordsLine}");
+                sb.AppendLine($"{nextId}. {worsdLine}");
             }
 
             return sb.ToString();

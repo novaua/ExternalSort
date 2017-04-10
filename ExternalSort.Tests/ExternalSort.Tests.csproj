@@ -53,6 +53,7 @@
     </Otherwise>
   </Choose>
   <ItemGroup>
+    <Compile Include="CountedListTests.cs" />
     <Compile Include="Generic.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="FileLinesQueueTests.cs" />

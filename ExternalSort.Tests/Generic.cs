@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Common;
@@ -8,27 +11,6 @@ namespace ExternalSort.Tests
     [TestClass]
     public class Generic
     {
-        [TestMethod]
-        public void TestMethod1()
-        {
-            IdString o1;
-            var in1 = "23.Hello world!";
-            IdString.TryMakeIdString(in1, out o1);
-            Assert.AreEqual(o1.ToString(), in1);
-
-            IdString o2;
-            var in2 = "23. Hello .world!";
-            IdString.TryMakeIdString(in2, out o2);
-            Assert.AreEqual(o2.ToString(), in2);
-
-            Assert.AreEqual(o1.Id, o2.Id);
-
-            in1 = "23 Hello world!";
-            IdString o3;
-            IdString.TryMakeIdString(in1, out o3);
-            Assert.AreEqual(default(IdString), o3);
-        }
-
         [TestMethod]
         public void TestStringBytes()
         {
@@ -55,10 +37,51 @@ namespace ExternalSort.Tests
                 BytesFormatter.Format(long.MaxValue),
             };
 
+            Assert.AreEqual("0 bytes", varints[0]);
+            Assert.AreEqual("7 MB", varints[5]);
+
             foreach (var v in varints)
             {
                 Console.WriteLine(v);
             }
+        }
+
+        [TestMethod]
+        public void TestLinesCopmparer()
+        {
+            var lines = new List<string>
+            {
+                "23. Apple",
+                "100500. Hello",
+                "44. Hello",
+                "0. Hello",
+                "3. Apple",
+                "23. End!",
+            };
+
+            lines.Sort(new LineComparer());
+
+            Assert.AreEqual("3. Apple", lines.First());
+            Assert.AreEqual("100500. Hello", lines.Last());
+        }
+
+        [TestMethod]
+        public void TestBadLinesCopmparer()
+        {
+            var lines = new List<string>
+            {
+                "23. Apple",
+                "100500. Hello",
+                "44. Hello",
+                "End!",
+                "0. Hello",
+                "3. Apple",
+            };
+
+            lines.Sort(new LineComparer());
+
+            Assert.AreEqual("3. Apple", lines.First());
+            Assert.AreEqual("End!", lines.Last());
         }
     }
 }

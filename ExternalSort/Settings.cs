@@ -1,14 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ExternalSort
 {
-    public class Bounds
+    public class Settings
     {
-        public Bounds()
+        public Settings()
         {
             //1 GB
             MaxMemoryUsageBytes = 1 * 1024 * 1024;
@@ -17,6 +13,8 @@ namespace ExternalSort
 
             // Safe value
             MaxQueueRecords = 1000;
+
+            OrdinalStringSortOrder = false;
         }
 
         public ulong MaxMemoryUsageBytes { get; set; }
@@ -25,9 +23,10 @@ namespace ExternalSort
 
         public int MaxQueueRecords { get; set; }
 
-
         public long InputFileSize { get; set; }
 
         public long InputFileRecordCount { get; set; }
+
+        public bool OrdinalStringSortOrder { get; set; }
     }
 }

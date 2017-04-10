@@ -10,9 +10,10 @@ namespace ExternalSort
         public CountedList(ulong maxIntems)
         {
             _maxItems = maxIntems;
+            TotalItems = 0;
         }
 
-        public Action<List<string>> MaxIntemsReached;
+        public Action<List<string>, ulong> MaxIntemsReached;
 
         public new void Add(string item)
         {
@@ -21,7 +22,11 @@ namespace ExternalSort
             TotalItems += (ulong)item.Length;
             if (TotalItems >= _maxItems)
             {
-                MaxIntemsReached?.Invoke(this);
+                var clist = new List<string>(this);
+                MaxIntemsReached?.Invoke(clist, TotalItems);
+
+                Clear();
+                TotalItems = 0;
             }
         }
 
