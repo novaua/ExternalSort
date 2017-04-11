@@ -13,6 +13,8 @@ namespace ExternalSort
             MaxQueueRecords = 1000;
 
             OrdinalStringSortOrder = false;
+
+            DeflateTempFiles = true;
         }
 
         public ulong MaxMemoryUsageBytes { get; set; }
@@ -20,5 +22,7 @@ namespace ExternalSort
         public int MaxQueueRecords { get; set; }
 
         public bool OrdinalStringSortOrder { get; set; }
+
+        public bool DeflateTempFiles { get; set; }
     }
 }
