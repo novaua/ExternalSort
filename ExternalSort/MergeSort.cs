@@ -51,7 +51,7 @@ namespace ExternalSort
             return _comparer.Compare(x, y);
         }
 
-        public async Task MergeSortFiles(IList<string> files, long totalLines, string outputFile, Comparison<string> linesEqualityComparer)
+        private async Task MergeSortFiles(IList<string> files, long totalLines, string outputFile, Comparison<string> linesEqualityComparer)
         {
             var maxQueueRecords = Settings.MaxQueueRecords;
             var sortedChunks = new SortedDictionary<string, List<AutoFileQueue>>(_comparer);
@@ -104,7 +104,7 @@ namespace ExternalSort
             }
         }
 
-        public async Task<string> LinesWriter(IList<string> lines, string tempPath)
+        private async Task<string> LinesWriter(IList<string> lines, string tempPath)
         {
             var tempFileName = Path.Combine(tempPath, Path.GetRandomFileName());
             var fs = OpenForAsyncWrite(tempFileName);
@@ -117,11 +117,10 @@ namespace ExternalSort
                 }
             }
 
-            //Console.WriteLine($"{lines.Count} lines written to '{tempFileName}'");
             return tempFileName;
         }
 
-        public Tuple<long, IList<string>> Split(string file, string tempLocationPath)
+        private Tuple<long, IList<string>> Split(string file, string tempLocationPath)
         {
             var files = new List<string>();
             var writeTask = Task.CompletedTask;
@@ -172,7 +171,7 @@ namespace ExternalSort
                 }
             }
 
-            Console.WriteLine("{0} files created. Total lines {1}", files.Count, lineCount);
+            Console.WriteLine("{0} files created. Total lines {1}. Max Queue size {2}", files.Count, lineCount, Settings.MaxQueueRecords);
             return new Tuple<long, IList<string>>(lineCount, files);
         }
 

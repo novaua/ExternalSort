@@ -6,8 +6,8 @@ namespace ExternalSort
     {
         public Settings()
         {
-            //1 GB
-            MaxMemoryUsageBytes = 10 * 1024 * 1024;
+            //512 MB
+            MaxMemoryUsageBytes = 512 * 1024 * 1024;
 
             // Safe value
             MaxQueueRecords = 1000;
