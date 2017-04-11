@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ExternalSort
 {
-    public sealed class CountedList : List<string>
+    public sealed class CountedList : IDisposable
     {
+        private const int DefaultCapacity = 1024;
+        private List<string> _innerList = new List<string>(DefaultCapacity);
         private readonly ulong _maxItems;
 
         public CountedList(ulong maxIntems)
@@ -15,21 +18,28 @@ namespace ExternalSort
 
         public Action<List<string>, ulong> MaxIntemsReached;
 
-        public new void Add(string item)
+        public void Add(string item)
         {
-            base.Add(item);
+            _innerList.Add(item);
 
             TotalItems += (ulong)item.Length;
             if (TotalItems >= _maxItems)
             {
-                var clist = new List<string>(this);
-                MaxIntemsReached?.Invoke(clist, TotalItems);
-
-                Clear();
+                MaxIntemsReached?.Invoke(_innerList, TotalItems);
+                _innerList = new List<string>(DefaultCapacity);
                 TotalItems = 0;
             }
         }
 
         public ulong TotalItems { get; private set; }
+
+        public void Dispose()
+        {
+            if (_innerList.Any())
+            {
+                MaxIntemsReached?.Invoke(_innerList, TotalItems);
+                _innerList.Clear();
+            }
+        }
     }
 }

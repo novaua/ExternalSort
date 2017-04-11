@@ -59,9 +59,11 @@ namespace ExternalSort
             foreach (var file in files)
             {
                 var fileStreeam = OpenForAsyncRead(file);
-                var unzipStream = new GZipStream(fileStreeam, CompressionMode.Decompress);
-                var reader = new StreamReader(unzipStream, Encoding.UTF8);
+                totalSize += fileStreeam.Length;
 
+                //var unzipStream = new GZipStream(fileStreeam, CompressionMode.Decompress);
+                //var reader = new StreamReader(unzipStream, Encoding.UTF8);
+                var reader = new StreamReader(fileStreeam, Encoding.UTF8);
                 var autoQueue = new AutoFileQueue(reader, maxQueueRecords);
                 if (autoQueue.Any())
                 {
@@ -73,8 +75,6 @@ namespace ExternalSort
                     autoQueue.Dispose();
                     Debug.Assert(false, "Empty queue. This should never happen!");
                 }
-
-                totalSize += fileStreeam.Length;
             }
 
             using (new AutoStopwatch("Merge sorted files ", totalSize))
@@ -100,9 +100,10 @@ namespace ExternalSort
         public async Task<string> LinesWriter(IList<string> lines, string tempPath)
         {
             var tempFileName = Path.Combine(tempPath, Path.GetRandomFileName());
-            var fs = OpenForAsyncWrite(tempFileName);
-            var gz = new GZipStream(fs, CompressionMode.Compress);
-            using (var stringStream = new StreamWriter(gz, Encoding.UTF8, FileBufferSize))
+            using (var fs = OpenForAsyncWrite(tempFileName))
+            //var gz = new GZipStream(fs, CompressionMode.Compress);
+            //using (var stringStream = new StreamWriter(gz, Encoding.UTF8, FileBufferSize))
+            using (var stringStream = new StreamWriter(fs, Encoding.UTF8, FileBufferSize, true))
             {
                 foreach (var line in lines)
                 {
@@ -110,6 +111,7 @@ namespace ExternalSort
                 }
             }
 
+            Console.WriteLine($"{lines.Count} lines written to '{tempFileName}'");
             return tempFileName;
         }
 
@@ -119,48 +121,49 @@ namespace ExternalSort
             var writeTask = Task.CompletedTask;
             var lineCount = 0L;
 
-            var countedList = new CountedList(Settings.MaxMemoryUsageBytes / 2);
-            countedList.MaxIntemsReached += (fullList, bytesCount) =>
+            using (var countedList = new CountedList(Settings.MaxMemoryUsageBytes / 2))
             {
-                writeTask.Wait();
-
-                lineCount += fullList.Count;
-
-                writeTask = Task.Run(() => fullList.Sort(_comparer))
-                .ContinueWith(antecendent =>
-                        {
-                            using (new AutoStopwatch("Creating file", (long)bytesCount))
-                            {
-                                files.Add(LinesWriter(fullList, tempLocationPath).Result);
-                                Console.WriteLine($"File written '{files.Last()}'");
-                            }
-                        }
-                );
-            };
-
-            var bigInputFile = OpenForAsyncRead(file);
-            using (var inputStream = new StreamReader(bigInputFile))
-            {
-                var done = false;
-                while (!done)
+                countedList.MaxIntemsReached += (fullList, bytesCount) =>
                 {
-                    var res = ReadLines(inputStream).Result;
-                    var lines = res.Item1;
-                    done = res.Item2;
-
-                    foreach (var line in lines)
+                    writeTask.Wait();
+                    writeTask = Task.Run(() =>
                     {
-                        countedList.Add(line);
+                        fullList.Sort(_comparer);
+                        using (new AutoStopwatch("Creating file", (long) bytesCount))
+                        {
+                            files.Add(LinesWriter(fullList, tempLocationPath).Result);
+                        }
+                    });
+                };
+
+                var bigInputFile = OpenForAsyncRead(file);
+                using (var inputStream = new StreamReader(bigInputFile))
+                {
+                    var done = false;
+                    while (!done)
+                    {
+                        var res = ReadLines(inputStream).Result;
+                        var lines = res.Item1;
+                        done = res.Item2;
+
+                        lineCount += lines.Count;
+
+                        foreach (var line in lines)
+                        {
+                            countedList.Add(line);
+                        }
                     }
                 }
+            }
 
-                if (lineCount > 0)
+            writeTask.Wait();
+            var inputFileLength = new FileInfo(file).Length;
+            if (lineCount > 0)
+            {
+                var bytesPerLine = inputFileLength / lineCount;
+                checked
                 {
-                    var bytesPerLine = bigInputFile.Length / lineCount;
-                    checked
-                    {
-                        Settings.MaxQueueRecords = (int)((long)Settings.MaxMemoryUsageBytes / bytesPerLine / files.Count / 4);
-                    }
+                    Settings.MaxQueueRecords = (int)((long)Settings.MaxMemoryUsageBytes / bytesPerLine / files.Count / 4);
                 }
             }
 

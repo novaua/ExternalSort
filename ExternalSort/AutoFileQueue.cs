@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -60,7 +61,7 @@ namespace ExternalSort
 
         private void WaitQueueLoaded()
         {
-            if (_queueLoadTask != null)
+            if (_queueLoadTask != null && !_disposed)
             {
                 _queueLoadTask.Wait();
                 _queueLoadTask.Dispose();
@@ -73,29 +74,39 @@ namespace ExternalSort
             Debug.Assert(_queueLoadTask == null, "Sanity check");
             _queueLoadTask = Task.Run(async () =>
             {
-                await LoadQueue(_queue,
+                var done = await LoadQueue(_queue,
                     _file,
-                    _maxLoadedRecords
-                    /*,
-                    () =>
-                    {
-                        if (_fileOwner) _file.Close();
-                    }*/);
+                    _maxLoadedRecords);
+                if (done)
+                {
+                    Dispose();
+                }
             });
         }
 
-        static async Task LoadQueue(Queue<string> queue, StreamReader file, int records)
+        /// <summary>
+        /// Feels the queue
+        /// </summary>
+        /// <param name="queue"></param>
+        /// <param name="file"></param>
+        /// <param name="records"></param>
+        /// <returns>true when done</returns>
+        static async Task<bool> LoadQueue(Queue<string> queue, StreamReader file, int records)
         {
             for (var i = 0; i < records; i++)
             {
-                if (file.Peek() < 0)
+                var line = await file.ReadLineAsync();
+                if (line != null)
                 {
-                    //onDepleted?.Invoke();
-                    break;
+                    queue.Enqueue(line);
                 }
-
-                queue.Enqueue(await file.ReadLineAsync());
+                else
+                {
+                    return true;
+                }
             }
+
+            return false;
         }
     }
 }
