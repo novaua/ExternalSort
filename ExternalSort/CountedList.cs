@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace ExternalSort
 {
@@ -35,10 +34,10 @@ namespace ExternalSort
 
         public void Dispose()
         {
-            if (_innerList.Any())
+            if (TotalItems != 0)
             {
                 MaxIntemsReached?.Invoke(_innerList, TotalItems);
-                _innerList.Clear();
+                TotalItems = 0;
             }
         }
     }

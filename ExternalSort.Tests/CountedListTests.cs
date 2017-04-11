@@ -24,8 +24,8 @@ namespace ExternalSort.Tests
         [TestMethod]
         public void BasicTest()
         {
-            var exepectedCount = 6;
-            var cc = exepectedCount * DefaultCount;
+            var cc = 6 * DefaultCount + 3;
+            var exepectedCount = 7;
 
             var count = 0;
             _countedList.MaxIntemsReached = (l, ic) =>
@@ -39,6 +39,7 @@ namespace ExternalSort.Tests
                 _countedList.Add("Item");
             }
 
+            _countedList.Dispose();
             Assert.AreEqual(exepectedCount, count);
         }
     }

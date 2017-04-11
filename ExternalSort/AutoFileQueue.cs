@@ -41,6 +41,12 @@ namespace ExternalSort
             }
         }
 
+        public string Peek()
+        {
+            WaitQueueLoaded();
+            return _queue.Peek();
+        }
+
         public string Dequeue()
         {
             WaitQueueLoaded();

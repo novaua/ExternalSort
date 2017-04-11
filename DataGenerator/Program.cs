@@ -87,7 +87,7 @@ namespace DataGenerator
         private static async Task GenerateFile(string[] dictionary, string fileName, ulong maxSize)
         {
             var rand = new Random();
-            ulong linesCount = 1;
+            ulong lineCount = 1;
 
             using (var file = File.Create(fileName, OutFileBuffer, FileOptions.Asynchronous | FileOptions.SequentialScan))
             using (var sw = new StreamWriter(file, Encoding.UTF8, OutFileBuffer, true))
@@ -95,13 +95,13 @@ namespace DataGenerator
             {
                 while (file.Length < (long)maxSize)
                 {
-                    var lines = GenerateLines(dictionary, rand, linesCount, ChunkSize);
+                    var lines = GenerateLines(dictionary, rand, lineCount, ChunkSize);
                     await sw.WriteAsync(lines);
-                    linesCount += ChunkSize;
+                    lineCount += ChunkSize;
                 }
 
                 stopWatch.WorkAmount = file.Length;
-                Console.WriteLine("File '{0}' of total {1} lines of size {2} generated", fileName, linesCount, BytesFormatter.Format(file.Length));
+                Console.WriteLine("File '{0}' of total {1} lines of size {2} generated", fileName, lineCount, BytesFormatter.Format(file.Length));
             }
         }
 
@@ -109,8 +109,8 @@ namespace DataGenerator
         {
             var wordsCount = dictionary.Length - 1;
             var sb = new StringBuilder();
-
-            for (var i = 0u; i < chunkCount; ++i)
+            var firstLine = string.Empty;
+            for (var i = 0u; i < chunkCount - 1; ++i)
             {
                 var wordsList = new List<string>();
                 for (var j = 0; j < rand.Next(1, MaxWordsInLine + 1); ++j)
@@ -122,7 +122,14 @@ namespace DataGenerator
                 var worsdLine = string.Join(" ", wordsList);
                 var nextId = id + i;
                 sb.AppendLine($"{nextId}. {worsdLine}");
+                if (string.IsNullOrEmpty(firstLine))
+                {
+                    firstLine = sb.ToString();
+                }
             }
+
+            // assure repetitions
+            sb.Append(firstLine);
 
             return sb.ToString();
         }

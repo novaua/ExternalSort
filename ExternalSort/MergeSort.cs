@@ -13,8 +13,8 @@ namespace ExternalSort
     public class MergeSort
     {
         private const int FileBufferSize = 32 * 1024;
-
         private readonly IComparer<string> _comparer;
+        private long _inputFileLength = 0;
 
         public MergeSort(Settings settings)
         {
@@ -33,6 +33,9 @@ namespace ExternalSort
 
         public void MergeSortFile(string inputFile, string outputFile)
         {
+            var inputFileLength = new FileInfo(inputFile).Length;
+            _inputFileLength = inputFileLength;
+
             var files = Split(inputFile, Path.GetTempPath());
 
             MergeSortFiles(files.Item2, files.Item1, outputFile, Comparator).Wait();
@@ -51,48 +54,52 @@ namespace ExternalSort
         public async Task MergeSortFiles(IList<string> files, long totalLines, string outputFile, Comparison<string> linesEqualityComparer)
         {
             var maxQueueRecords = Settings.MaxQueueRecords;
-            var sortedChunks = new SortedDictionary<string, AutoFileQueue>(_comparer);
+            var sortedChunks = new SortedDictionary<string, List<AutoFileQueue>>(_comparer);
 
             var totalSize = 0L;
-            // Open the files
-
             foreach (var file in files)
             {
                 var fileStreeam = OpenForAsyncRead(file);
                 totalSize += fileStreeam.Length;
 
-                //var unzipStream = new GZipStream(fileStreeam, CompressionMode.Decompress);
-                //var reader = new StreamReader(unzipStream, Encoding.UTF8);
-                var reader = new StreamReader(fileStreeam, Encoding.UTF8);
+                var unzipStream = new GZipStream(fileStreeam, CompressionMode.Decompress);
+                var reader = new StreamReader(unzipStream, Encoding.UTF8);
                 var autoQueue = new AutoFileQueue(reader, maxQueueRecords);
                 if (autoQueue.Any())
                 {
-                    var top = autoQueue.Dequeue();
-                    sortedChunks.Add(top, autoQueue);
+                    var top = autoQueue.Peek();
+                    if (sortedChunks.ContainsKey(top))
+                    {
+                        sortedChunks[top].Add(autoQueue);
+                    }
+
+                    sortedChunks.Add(top, new List<AutoFileQueue> { autoQueue });
                 }
                 else
                 {
                     autoQueue.Dispose();
-                    Debug.Assert(false, "Empty queue. This should never happen!");
+                    Debug.Assert(false, "Empty queue loaded from file. This should never happen!");
                 }
             }
 
-            using (new AutoStopwatch("Merge sorted files ", totalSize))
+            using (new AutoStopwatch("Merge sort input", _inputFileLength))
+            using (new AutoStopwatch("Merge sort compressed files ", totalSize))
             using (var sw = new StreamWriter(OpenForAsyncWrite(outputFile)))
             {
                 var progress = 0;
+                var totalWork = totalLines;
+
                 while (sortedChunks.Any())
                 {
-                    if (++progress % 1000 == 0)
-                    {
-                        Console.Write("{0:f2}%   \r", (100.0 * progress) / totalLines);
-                    }
+                    Console.Write("{0:f2}%   \r", (100.0 * progress) / totalWork);
 
-                    foreach (var line in NWayMerge(sortedChunks))
+                    var lines = NWayMerge(sortedChunks);
+                    foreach (var line in lines)
                     {
-                        ++progress;
                         await sw.WriteLineAsync(line);
                     }
+
+                    progress += lines.Count;
                 }
             }
         }
@@ -100,10 +107,9 @@ namespace ExternalSort
         public async Task<string> LinesWriter(IList<string> lines, string tempPath)
         {
             var tempFileName = Path.Combine(tempPath, Path.GetRandomFileName());
-            using (var fs = OpenForAsyncWrite(tempFileName))
-            //var gz = new GZipStream(fs, CompressionMode.Compress);
-            //using (var stringStream = new StreamWriter(gz, Encoding.UTF8, FileBufferSize))
-            using (var stringStream = new StreamWriter(fs, Encoding.UTF8, FileBufferSize, true))
+            var fs = OpenForAsyncWrite(tempFileName);
+            var gz = new GZipStream(fs, CompressionLevel.Fastest);
+            using (var stringStream = new StreamWriter(gz, Encoding.UTF8, FileBufferSize))
             {
                 foreach (var line in lines)
                 {
@@ -111,7 +117,7 @@ namespace ExternalSort
                 }
             }
 
-            Console.WriteLine($"{lines.Count} lines written to '{tempFileName}'");
+            //Console.WriteLine($"{lines.Count} lines written to '{tempFileName}'");
             return tempFileName;
         }
 
@@ -121,49 +127,48 @@ namespace ExternalSort
             var writeTask = Task.CompletedTask;
             var lineCount = 0L;
 
-            using (var countedList = new CountedList(Settings.MaxMemoryUsageBytes / 2))
+            using (new AutoStopwatch("Creating temp files", _inputFileLength))
             {
-                countedList.MaxIntemsReached += (fullList, bytesCount) =>
+                using (var countedList = new CountedList(Settings.MaxMemoryUsageBytes / 2))
                 {
-                    writeTask.Wait();
-                    writeTask = Task.Run(() =>
+                    countedList.MaxIntemsReached += (fullList, bytesCount) =>
                     {
-                        fullList.Sort(_comparer);
-                        using (new AutoStopwatch("Creating file", (long) bytesCount))
+                        writeTask.Wait();
+                        writeTask = Task.Run(() =>
                         {
+                            fullList.Sort(_comparer);
                             files.Add(LinesWriter(fullList, tempLocationPath).Result);
-                        }
-                    });
-                };
+                        });
+                    };
 
-                var bigInputFile = OpenForAsyncRead(file);
-                using (var inputStream = new StreamReader(bigInputFile))
-                {
-                    var done = false;
-                    while (!done)
+                    var bigInputFile = OpenForAsyncRead(file);
+                    using (var inputStream = new StreamReader(bigInputFile))
                     {
-                        var res = ReadLines(inputStream).Result;
-                        var lines = res.Item1;
-                        done = res.Item2;
-
-                        lineCount += lines.Count;
-
-                        foreach (var line in lines)
+                        var done = false;
+                        while (!done)
                         {
-                            countedList.Add(line);
+                            var res = ReadLines(inputStream).Result;
+                            var lines = res.Item1;
+                            done = res.Item2;
+
+                            lineCount += lines.Count;
+
+                            foreach (var line in lines)
+                            {
+                                countedList.Add(line);
+                            }
                         }
                     }
                 }
-            }
 
-            writeTask.Wait();
-            var inputFileLength = new FileInfo(file).Length;
-            if (lineCount > 0)
-            {
-                var bytesPerLine = inputFileLength / lineCount;
-                checked
+                writeTask.Wait();
+                if (lineCount > 0)
                 {
-                    Settings.MaxQueueRecords = (int)((long)Settings.MaxMemoryUsageBytes / bytesPerLine / files.Count / 4);
+                    var bytesPerLine = _inputFileLength / lineCount;
+                    checked
+                    {
+                        Settings.MaxQueueRecords = (int)((long)Settings.MaxMemoryUsageBytes / bytesPerLine / files.Count / 4);
+                    }
                 }
             }
 
@@ -191,16 +196,36 @@ namespace ExternalSort
             return new Tuple<IList<string>, bool>(result, done);
         }
 
-        private List<string> NWayMerge(IDictionary<string, AutoFileQueue> sortedChunks, int maxCount = 1024)
+        private List<string> NWayMerge(IDictionary<string, List<AutoFileQueue>> sortedChunks, int maxCount = 1024)
         {
             var outList = new List<string>(maxCount);
             for (var i = 0; i < maxCount && sortedChunks.Any(); i++)
             {
                 var top = sortedChunks.First();
-
-                outList.Add(top.Key);
                 sortedChunks.Remove(top.Key);
 
+                foreach (var topValueQeue in top.Value)
+                {
+                    outList.Add(topValueQeue.Dequeue());
+                    if (!topValueQeue.Any())
+                    {
+                        topValueQeue.Dispose();
+                        continue;
+                    }
+
+                    var newTop = topValueQeue.Peek();
+                    if (sortedChunks.ContainsKey(newTop))
+                    {
+                        sortedChunks[newTop].Add(topValueQeue);
+                    }
+                    else
+                    {
+                        sortedChunks.Add(newTop, new List<AutoFileQueue> { topValueQeue });
+                    }
+                }
+
+                /*
+                 // ToDo: Add pick values from a current queue until closest key
                 var afterTop = sortedChunks.FirstOrDefault();
                 var queue = top.Value;
 
@@ -219,6 +244,7 @@ namespace ExternalSort
                 }
 
                 sortedChunks.Add(newKey, queue);
+                */
             }
 
             return outList;
