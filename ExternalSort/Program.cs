@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Configuration;
 using System.Linq;
 
 namespace ExternalSort
@@ -36,13 +37,17 @@ namespace ExternalSort
                 return;
             }
 
+            var appSettings = ConfigurationManager.AppSettings;
+            var deflate = appSettings["DeflateTemp"];
+
             var ms = new MergeSort(
                 new Settings
                 {
-                    OrdinalStringSortOrder = option.StartsWith("/ord")
+                    OrdinalStringSortOrder = option.StartsWith("/ord"),
+                    DeflateTempFiles = deflate == "true",
                 });
 
-            ms.MergeSortFile(imputFile, outputFile);
+            ms.MergeSortFile(imputFile, outputFile).Wait();
         }
     }
 }
