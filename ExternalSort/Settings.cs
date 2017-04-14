@@ -1,4 +1,5 @@
 ﻿using System;
+using Common;
 
 namespace ExternalSort
 {
@@ -6,8 +7,8 @@ namespace ExternalSort
     {
         public Settings()
         {
-            //512 MB
-            MaxMemoryUsageBytes = 512 * 1024 * 1024;
+            //2 GB will work for 32 bit systems!
+            MaxMemoryUsageBytes = 2 * Constants.GB;
 
             // Safe value
             MaxQueueRecords = 1000;
@@ -15,11 +16,15 @@ namespace ExternalSort
             OrdinalStringSortOrder = false;
 
             DeflateTempFiles = true;
+
+            MaxProcessors = Environment.ProcessorCount;
         }
 
         public ulong MaxMemoryUsageBytes { get; set; }
 
         public int MaxQueueRecords { get; set; }
+
+        public int MaxProcessors { get; set; }
 
         public bool OrdinalStringSortOrder { get; set; }
 

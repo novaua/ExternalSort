@@ -7,7 +7,7 @@ namespace ExternalSort
     public class LineComparer : IComparer<string>
     {
         /// <summary>
-        /// This method tries hart to follow the spec. rules but nevertheless it never fails.
+        /// This method tries hard to follow the specs but nevertheless it never fails.
         /// </summary>
         /// <param name="x"></param>
         /// <param name="y"></param>

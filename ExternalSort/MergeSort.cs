@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Common;
 
@@ -36,7 +38,7 @@ namespace ExternalSort
             var inputFileLength = new FileInfo(inputFile).Length;
             _inputFileLength = inputFileLength;
 
-            var files = await Split(inputFile, Path.GetTempPath());
+            var files = Split(inputFile, Path.GetTempPath());
             await MergeSortFiles(files.Item2, files.Item1, outputFile, Comparator);
 
             foreach (var file in files.Item2)
@@ -101,61 +103,48 @@ namespace ExternalSort
             }
         }
 
-        private async Task<string> LinesWriter(IList<string> lines, string tempPath)
+        private async Task LinesWriter(IList<string> lines, string fileName)
         {
-            var tempFileName = Path.Combine(tempPath, Path.GetRandomFileName());
-            using (var stringStream = OpenForAsyncTextWrite(tempFileName))
+            using (var stringStream = OpenForAsyncTextWrite(fileName))
             {
                 foreach (var line in lines)
                 {
                     await stringStream.WriteLineAsync(line);
                 }
             }
-
-            return tempFileName;
         }
 
-        private async Task<Tuple<long, IList<string>>> Split(string file, string tempLocationPath)
+        private Tuple<long, IList<string>> Split(string file, string tempLocationPath)
         {
             var files = new List<string>();
-            var writeTask = Task.CompletedTask;
             var lineCount = 0L;
+            var maxProcessors = Settings.MaxProcessors;
+            var maxFileSize = (long)Settings.MaxMemoryUsageBytes / maxProcessors;
 
-            using (new AutoStopwatch("Creating temp files", _inputFileLength))
+            using (new AutoStopwatch($"Creating temp files using {maxProcessors} threads", _inputFileLength))
             {
-                using (var countedList = new CountedList(Settings.MaxMemoryUsageBytes / 2))
+                using (var bigInputFile = OpenForAsyncRead(file))
                 {
-                    countedList.MaxIntemsReached += (fullList, bytesCount) =>
+                    var rangeList = TextLinesAwareSplit(bigInputFile, maxFileSize);
+                    bigInputFile.Close();
+                    MakeTempFiles(files, rangeList.Count, tempLocationPath);
+
+                    Parallel.ForEach(rangeList,
+                        new ParallelOptions { MaxDegreeOfParallelism = maxProcessors },
+                        (range, state, id) =>
                     {
-                        writeTask.Wait();
-                        writeTask = Task.Run(async () =>
+                        List<string> linesList;
+                        using (var inputFile = new StreamReader(OpenForAsyncRead(file)))
                         {
-                            fullList.Sort(_comparer);
-                            files.Add(await LinesWriter(fullList, tempLocationPath));
-                        });
-                    };
-
-                    var bigInputFile = OpenForAsyncRead(file);
-                    using (var inputStream = new StreamReader(bigInputFile))
-                    {
-                        var done = false;
-                        while (!done)
-                        {
-                            var res = await ReadLines(inputStream);
-                            var lines = res.Item1;
-                            done = res.Item2;
-
-                            lineCount += lines.Count;
-
-                            foreach (var line in lines)
-                            {
-                                countedList.Add(line);
-                            }
+                            linesList = ReadAllLinesInRange(inputFile, range).Result;
+                            linesList.Sort(_comparer);
                         }
-                    }
+
+                        Interlocked.Add(ref lineCount, linesList.Count);
+                        LinesWriter(linesList, files[(int)id]).Wait();
+                    });
                 }
 
-                await writeTask;
                 if (lineCount > 0)
                 {
                     var bytesPerLine = _inputFileLength / lineCount;
@@ -166,41 +155,25 @@ namespace ExternalSort
                 }
             }
 
-            Console.WriteLine("{0} files created. Total lines {1}. Max Queue size {2}", files.Count, lineCount, Settings.MaxQueueRecords);
+            Console.WriteLine("{0} files created. Total lines {1}. Max Queue size {2}. Max file size {3}", files.Count, lineCount, Settings.MaxQueueRecords, maxFileSize);
             return new Tuple<long, IList<string>>(lineCount, files);
         }
 
-        private async Task<Tuple<IList<string>, bool>> ReadLines(StreamReader reader, int maxCount = 1024)
+        private async Task<List<string>> ReadAllLinesInRange(StreamReader reader, OffsetLength<long> range)
         {
             var result = new List<string>();
             var done = false;
-            for (int i = 0; i < maxCount; i++)
+            var endOffset = range.Offset + range.Length;
+
+            while (reader.BaseStream.Position < endOffset)
             {
                 var line = await reader.ReadLineAsync();
-                if (line != null)
-                {
-                    result.Add(line);
-                }
-                else
-                {
-                    done = true;
-                }
+                Debug.Assert(line != null, "Sanity check");
+
+                result.Add(line);
             }
 
-            return new Tuple<IList<string>, bool>(result, done);
-        }
-
-        private static void AddToQueue(IDictionary<string, List<AutoFileQueue>> sortedChunks, AutoFileQueue queue)
-        {
-            var newTop = queue.Peek();
-            if (sortedChunks.ContainsKey(newTop))
-            {
-                sortedChunks[newTop].Add(queue);
-            }
-            else
-            {
-                sortedChunks.Add(newTop, new List<AutoFileQueue> { queue });
-            }
+            return new List<string>(result);
         }
 
         private List<string> NWayMerge(IDictionary<string, List<AutoFileQueue>> sortedChunks, int maxCount = 1024)
@@ -246,6 +219,74 @@ namespace ExternalSort
             return outList;
         }
 
+        private IList<OffsetLength<long>> TextLinesAwareSplit(Stream input, long maxChunkLenght)
+        {
+            var length = input.Length;
+            var partsCount = length / maxChunkLenght + length % maxChunkLenght > 0 ? 1 : 0;
+            var partList = new List<OffsetLength<long>>(partsCount);
+
+            for (var i = 0L; i < length; i += maxChunkLenght)
+            {
+                var maxLength = Math.Min(maxChunkLenght, length - i);
+                partList.Add(new OffsetLength<long> { Offset = i, Length = maxLength });
+            }
+
+            for (var j = 0; j < partList.Count - 1; ++j)
+            {
+                var current = partList[j];
+                var next = partList[j + 1];
+
+                var endOffset = current.Offset + current.Length;
+                Debug.Assert(next.Offset == endOffset, "Sanity check");
+
+                var offsetDelta = SeekForwardEolOffset(input, endOffset);
+                if (offsetDelta != 0)
+                {
+                    current.Length += offsetDelta;
+                    next.Offset += offsetDelta;
+                    next.Length -= offsetDelta;
+                }
+            }
+
+            return partList;
+        }
+
+        private long SeekForwardEolOffset(Stream input, long startPos)
+        {
+            var plusOffset = 0L;
+            if (startPos >= input.Length)
+            {
+                throw new ArgumentException("Offset is out of file bounds!");
+            }
+
+            input.Seek(startPos, SeekOrigin.Begin);
+
+            var buffer = new byte[256];
+            var found = false;
+            while (input.CanRead && !found)
+            {
+                var maxRead = (int)Math.Min(buffer.Length, input.Length - plusOffset);
+                var readThisTime = input.Read(buffer, 0, maxRead);
+                if (readThisTime <= 0)
+                {
+                    throw new IOException("Unexpected EOF reached");
+                }
+
+                var resultOffset = Algorithm.FindEolOffset(buffer);
+                if (resultOffset >= 0)
+                {
+                    plusOffset += resultOffset;
+                    found = true;
+                }
+                else
+                {
+                    plusOffset += readThisTime;
+                }
+            }
+
+            return found ? plusOffset : -1;
+        }
+
         private StreamWriter OpenForAsyncTextWrite(string fileName)
         {
             var fileStream = OpenForAsyncWrite(fileName);
@@ -270,6 +311,34 @@ namespace ExternalSort
         private static FileStream OpenForAsyncRead(string fileName)
         {
             return new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read, FileBufferSize, FileOptions.Asynchronous);
+        }
+
+        private static void MakeTempFiles(IList<string> destination, int count, string tempLocationPath)
+        {
+            destination.Clear();
+            while (destination.Count < count)
+            {
+                var tempFileName = Path.Combine(tempLocationPath, Path.GetRandomFileName());
+                if (File.Exists(tempFileName))
+                {
+                    continue;
+                }
+
+                destination.Add(tempFileName);
+            }
+        }
+
+        private static void AddToQueue(IDictionary<string, List<AutoFileQueue>> sortedChunks, AutoFileQueue queue)
+        {
+            var newTop = queue.Peek();
+            if (sortedChunks.ContainsKey(newTop))
+            {
+                sortedChunks[newTop].Add(queue);
+            }
+            else
+            {
+                sortedChunks.Add(newTop, new List<AutoFileQueue> { queue });
+            }
         }
     }
 }

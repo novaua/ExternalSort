@@ -39,14 +39,20 @@ namespace ExternalSort
 
             var appSettings = ConfigurationManager.AppSettings;
             var deflate = appSettings["DeflateTemp"];
+            var maxMem = appSettings["MaxMemoryUsageBytes"];
+            var st = new Settings
+            {
+                OrdinalStringSortOrder = option.StartsWith("/ord"),
+                DeflateTempFiles = deflate == "true",
+            };
 
-            var ms = new MergeSort(
-                new Settings
-                {
-                    OrdinalStringSortOrder = option.StartsWith("/ord"),
-                    DeflateTempFiles = deflate == "true",
-                });
+            ulong mmem;
+            if (ulong.TryParse(maxMem, out mmem))
+            {
+                st.MaxMemoryUsageBytes = mmem;
+            }
 
+            var ms = new MergeSort(st);
             ms.MergeSortFile(imputFile, outputFile).Wait();
         }
     }
