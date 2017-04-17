@@ -35,13 +35,20 @@ namespace ExternalSort
         {
             var inputFileLength = new FileInfo(inputFile).Length;
             _inputFileLength = inputFileLength;
-
+            var asw = new AutoStopwatch("Total work", _inputFileLength);
             var files = await Split(inputFile, Path.GetTempPath());
-            await MergeSortFiles(files.Item2, files.Item1, outputFile, Comparator);
-
-            foreach (var file in files.Item2)
+            try
             {
-                File.Delete(file);
+                await MergeSortFiles(files.Item2, files.Item1, outputFile, Comparator);
+            }
+            finally
+            {
+                asw.Dispose();
+
+                foreach (var file in files.Item2)
+                {
+                    File.Delete(file);
+                }
             }
         }
 
