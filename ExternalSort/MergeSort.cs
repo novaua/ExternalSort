@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -108,38 +109,78 @@ namespace ExternalSort
             }
         }
 
-        private async Task<string> LinesWriter(IList<string> lines, string tempPath)
+        private async Task LinesWriter(IList<string> lines, string fileName)
         {
-            var tempFileName = Path.Combine(tempPath, Path.GetRandomFileName());
-            using (var stringStream = OpenForAsyncTextWrite(tempFileName))
+            using (var stringStream = OpenForAsyncTextWrite(fileName))
             {
                 foreach (var line in lines)
                 {
                     await stringStream.WriteLineAsync(line);
                 }
             }
+        }
 
-            return tempFileName;
+        private void Sorter(BlockingCollection<Tuple<string, List<string>>> unsorted, BlockingCollection<Tuple<string, List<string>>> sorted)
+        {
+            foreach (var job in unsorted.GetConsumingEnumerable())
+            {
+                job.Item2.Sort(_comparer);
+                sorted.Add(job);
+            }
+        }
+
+        private async Task Writer(BlockingCollection<Tuple<string, List<string>>> sorted)
+        {
+            foreach (var fullList in sorted.GetConsumingEnumerable())
+            {
+                await LinesWriter(fullList.Item2, fullList.Item1);
+            }
+        }
+
+        private Task[] SetupProcessing(BlockingCollection<Tuple<string, List<string>>> unsorted, BlockingCollection<Tuple<string, List<string>>> sorted)
+        {
+            var taskList = new List<Task>();
+            for (var i = 0; i < Settings.MaxThreads; ++i)
+            {
+                taskList.Add(Task.Run(() => Sorter(unsorted, sorted)));
+            }
+
+            taskList.Add(Task.WhenAll(taskList.ToArray()).ContinueWith(a =>
+            {
+                sorted.CompleteAdding();
+                if (a.IsFaulted)
+                {
+                    throw a.Exception;
+                }
+            }));
+
+            for (var i = 0; i < 2; ++i)
+            {
+                taskList.Add(Task.Run(() => Writer(sorted)));
+            }
+
+            return taskList.ToArray();
         }
 
         private async Task<Tuple<long, IList<string>>> Split(string file, string tempLocationPath)
         {
             var files = new List<string>();
-            var writeTask = Task.CompletedTask;
             var lineCount = 0L;
 
+            using (var unsortedQueue = new BlockingCollection<Tuple<string, List<string>>>(Settings.MaxThreads))
+            using (var sortedQueue = new BlockingCollection<Tuple<string, List<string>>>(Settings.MaxThreads))
             using (new AutoStopwatch("Creating temp files", _inputFileLength))
             {
-                using (var countedList = new CountedList(Settings.MaxMemoryUsageBytes / 2))
+                var sortAndWriteTasks = SetupProcessing(unsortedQueue, sortedQueue);
+
+                using (var countedList = new CountedList(Settings.MaxMemoryUsageBytes / (uint)(2 * Settings.MaxThreads)))
                 {
                     countedList.MaxIntemsReached += (fullList, bytesCount) =>
                     {
-                        writeTask.Wait();
-                        writeTask = Task.Run(async () =>
-                        {
-                            fullList.Sort(_comparer);
-                            files.Add(await LinesWriter(fullList, tempLocationPath));
-                        });
+                        var tempFileName = Path.Combine(tempLocationPath, Path.GetRandomFileName());
+                        var job = new Tuple<string, List<string>>(tempFileName, fullList);
+                        unsortedQueue.Add(job);
+                        files.Add(tempFileName);
                     };
 
                     var bigInputFile = OpenForAsyncRead(file);
@@ -162,7 +203,10 @@ namespace ExternalSort
                     }
                 }
 
-                await writeTask;
+                unsortedQueue.CompleteAdding();
+                Console.Write("Read complete");
+                await Task.WhenAll(sortAndWriteTasks);
+
                 if (lineCount > 0)
                 {
                     var bytesPerLine = _inputFileLength / lineCount;

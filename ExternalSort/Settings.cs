@@ -7,10 +7,12 @@ namespace ExternalSort
         public Settings()
         {
             //512 MB
-            MaxMemoryUsageBytes = 512 * 1024 * 1024;
+            MaxMemoryUsageBytes = 1024 * 1024 * 1024;
 
             // Safe value
             MaxQueueRecords = 1000;
+
+            MaxThreads = Environment.ProcessorCount;
 
             OrdinalStringSortOrder = false;
 
@@ -18,6 +20,8 @@ namespace ExternalSort
         }
 
         public ulong MaxMemoryUsageBytes { get; set; }
+
+        public int MaxThreads { get; set; }
 
         public int MaxQueueRecords { get; set; }
 
