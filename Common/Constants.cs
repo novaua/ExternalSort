@@ -2,8 +2,8 @@
 {
     public static class Constants
     {
-        public const uint Mb = 1024 * 1024;
+        public const uint MB = 1024 * 1024;
 
-        public const uint Gb = 1024 * Mb;
+        public const uint GB = 1024 * MB;
     }
 }

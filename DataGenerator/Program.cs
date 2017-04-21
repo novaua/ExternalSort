@@ -13,7 +13,7 @@ namespace DataGenerator
 {
     public class Program
     {
-        private const ulong DafaultSize = Constants.Mb;
+        private const ulong DafaultSize = Constants.MB;
 
         private const int OutFileBuffer = 128 * 1024;
         private const int ChunkSize = 128;
@@ -47,11 +47,11 @@ namespace DataGenerator
                     var lowArg = args[0].ToLowerInvariant();
                     if (lowArg.EndsWith("mb"))
                     {
-                        outSize = (ulong)size * Constants.Mb;
+                        outSize = (ulong)size * Constants.MB;
                     }
                     else if (lowArg.EndsWith("gb"))
                     {
-                        outSize = (ulong)size * Constants.Gb;
+                        outSize = (ulong)size * Constants.GB;
                     }
                     else
                     {

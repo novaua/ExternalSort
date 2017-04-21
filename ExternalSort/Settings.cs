@@ -1,4 +1,5 @@
 ﻿using System;
+using Common;
 
 namespace ExternalSort
 {
@@ -6,8 +7,8 @@ namespace ExternalSort
     {
         public Settings()
         {
-            //512 MB
-            MaxMemoryUsageBytes = 1024 * 1024 * 1024;
+            //2 GB will work for 32 bit systems!
+            MaxMemoryUsageBytes = 2 * Constants.GB;
 
             // Safe value
             MaxQueueRecords = 1000;

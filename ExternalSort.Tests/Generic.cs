@@ -83,5 +83,18 @@ namespace ExternalSort.Tests
             Assert.AreEqual("3. Apple", lines.First());
             Assert.AreEqual("End!", lines.Last());
         }
+
+        [TestMethod]
+        public void TestFindSubByte()
+        {
+            var hello = "Hello";
+            var input = hello + Environment.NewLine + "!";
+
+            var endlineBytes = Encoding.UTF8.GetBytes(Environment.NewLine);
+            var inputBytes = Encoding.UTF8.GetBytes(input);
+
+            var found = Algorithm.FindByteSubsequence(inputBytes, endlineBytes);
+            Assert.AreEqual(hello.Length, found);
+        }
     }
 }
