@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace ExternalSort.Tests
@@ -17,27 +18,22 @@ namespace ExternalSort.Tests
         public void TestInitialize()
         {
             _tempFile = Path.GetTempFileName();
-            using (var sw = new StreamWriter(_tempFile))
-            {
-                for (int i = 0; i < MaxTestLines; i++)
-                {
-                    sw.WriteLine(Guid.NewGuid().ToString());
-                }
-            }
-
-            _queue = new AutoFileQueue(new StreamReader(_tempFile), MaxTestLines / 8);
         }
 
         [TestCleanup]
         public void CleanUp()
         {
-            _queue.Dispose();
-            File.Delete(_tempFile);
+            if (_queue != null)
+            {
+                _queue.Dispose();
+                File.Delete(_tempFile);
+            }
         }
 
         [TestMethod]
         public void TestBasics()
         {
+            MakeQueue();
             for (var i = 0; i < MaxTestLines; ++i)
             {
                 Guid guid;
@@ -50,11 +46,23 @@ namespace ExternalSort.Tests
         [TestMethod]
         public void TestEmptyFile()
         {
-            var tmp = Path.GetTempFileName();
-            using (var myQueue = new AutoFileQueue(new StreamReader(tmp)))
+            using (var myQueue = new AutoFileQueue(new StreamReader(_tempFile), CancellationToken.None))
             {
                 Assert.IsFalse(myQueue.Any());
             }
+        }
+
+        private void MakeQueue()
+        {
+            using (var sw = new StreamWriter(_tempFile))
+            {
+                for (int i = 0; i < MaxTestLines; i++)
+                {
+                    sw.WriteLine(Guid.NewGuid().ToString());
+                }
+            }
+
+            _queue = new AutoFileQueue(new StreamReader(_tempFile), CancellationToken.None, MaxTestLines / 8);
         }
     }
 }
