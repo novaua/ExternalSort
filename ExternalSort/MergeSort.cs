@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Common;
 
@@ -68,7 +69,7 @@ namespace ExternalSort
             {
                 totalSize += new FileInfo(file).Length;
                 var reader = OpenForAsyncTextRead(file);
-                var autoQueue = new AutoFileQueue(reader, maxQueueRecords);
+                var autoQueue = new AutoFileQueue(reader, CancellationToken.None, maxQueueRecords);
                 if (autoQueue.Any())
                 {
                     AddToQueue(sortedChunks, autoQueue);

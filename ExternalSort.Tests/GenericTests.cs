@@ -9,7 +9,7 @@ using Common;
 namespace ExternalSort.Tests
 {
     [TestClass]
-    public class Generic
+    public class GenericTests
     {
         [TestMethod]
         public void TestStringBytes()
