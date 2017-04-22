@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -59,17 +60,104 @@ namespace ExternalSort
             return _comparer.Compare(x, y);
         }
 
-        private async Task MergeSortFiles(IList<string> files, long totalLines, string outputFile, Comparison<string> linesEqualityComparer)
+        private async Task MergeSortFiles(IList<string> files, long initialtotalLines, string outputFile, Comparison<string> linesEqualityComparer)
         {
-            var maxQueueRecords = Settings.MaxQueueRecords;
-            var sortedChunks = new SortedDictionary<string, List<AutoFileQueue>>(_comparer);
+            var inputFilesQueue = new BlockingCollection<string>(Settings.MaxThreads * 2);
+            var sortedChunksQueue = new BlockingCollection<IDictionary<string, List<AutoFileQueue>>>(Settings.MaxThreads * 2);
+            var totalLines = initialtotalLines;
 
-            var totalSize = 0L;
-            foreach (var file in files)
+            var unprocessedFilesCount = files.Count;
+
+            var producerJob = Task.Factory.StartNew(() =>
             {
-                totalSize += new FileInfo(file).Length;
-                var reader = OpenForAsyncTextRead(file);
-                var autoQueue = new AutoFileQueue(reader, CancellationToken.None, maxQueueRecords);
+                JobMaker(inputFilesQueue, sortedChunksQueue);
+            }, TaskCreationOptions.LongRunning);
+
+            var fileSuplyJob = Task.Factory.StartNew(() =>
+            {
+                foreach (var file in files)
+                {
+                    inputFilesQueue.Add(file);
+                }
+                if (files.Count <= 4)
+                {
+                    inputFilesQueue.CompleteAdding();
+                }
+
+            }, TaskCreationOptions.LongRunning);
+
+            var doneLines = 0L;
+
+            var options = new ParallelOptions { MaxDegreeOfParallelism = Settings.MaxThreads };
+            var partitioner = Partitioner.Create(sortedChunksQueue.GetConsumingEnumerable(), EnumerablePartitionerOptions.NoBuffering);
+
+            Parallel.ForEach(partitioner, options, sortedChunk =>
+            {
+                var newsortedFile = Path.GetTempFileName();
+                if (Interlocked.Add(ref unprocessedFilesCount, 0) <= 2)
+                {
+                    Debug.Assert(inputFilesQueue.Count == 0, "Has to be null on complete!");
+                    if (!inputFilesQueue.IsCompleted)
+                    {
+                        inputFilesQueue.CompleteAdding();
+                    }
+
+                    sortedChunksQueue.CompleteAdding();
+
+                    newsortedFile = outputFile;
+                }
+
+                var newFileLines = 0L;
+                ChunkSorter(newsortedFile, sortedChunk, justDone =>
+                {
+                    newFileLines += justDone;
+                    var progress = Interlocked.Add(ref doneLines, justDone);
+                    if (progress % 4 * 1024 == 0)
+                    {
+                        Console.Write("{0:f2}%   \r", (100.0 * progress) / totalLines);
+                    }
+
+                }).Wait();
+
+                Interlocked.Add(ref unprocessedFilesCount, -1 * (sortedChunk.Count - 1));
+                if (!inputFilesQueue.IsCompleted)
+                {
+                    inputFilesQueue.Add(newsortedFile);
+                    Interlocked.Add(ref totalLines, newFileLines);
+                }
+            });
+
+            await Task.WhenAll(fileSuplyJob, producerJob);
+        }
+
+        private void JobMaker(
+            BlockingCollection<string> inputFilesQeeue,
+            BlockingCollection<IDictionary<string, List<AutoFileQueue>>> sortedChunksQueue,
+            int oneTimeMerge = 4)
+        {
+            var oneMergeJob = new List<string>();
+            foreach (var sourceFile in inputFilesQeeue.GetConsumingEnumerable())
+            {
+                oneMergeJob.Add(sourceFile);
+                if (oneMergeJob.Count >= oneTimeMerge)
+                {
+                    sortedChunksQueue.Add(MakeSortedChunks(oneMergeJob));
+                    oneMergeJob.Clear();
+                }
+            }
+
+            if (oneMergeJob.Any())
+            {
+                sortedChunksQueue.Add(MakeSortedChunks(oneMergeJob));
+            }
+        }
+
+        private SortedDictionary<string, List<AutoFileQueue>> MakeSortedChunks(List<string> oneMergeJob)
+        {
+            var sortedChunks = new SortedDictionary<string, List<AutoFileQueue>>();
+            foreach (var file in oneMergeJob)
+            {
+                var autoQueue = new AutoFileQueue(OpenForAsyncTextRead(file), CancellationToken.None);
                 if (autoQueue.Any())
                 {
                     AddToQueue(sortedChunks, autoQueue);
@@ -81,33 +169,29 @@ namespace ExternalSort
                 }
             }
 
-            using (new AutoStopwatch("Merge sort input", _inputFileLength))
-            using (new AutoStopwatch("Merge sort compressed files ", totalSize))
+            return sortedChunks;
+        }
+
+        private async Task ChunkSorter(string outputFile, IDictionary<string, List<AutoFileQueue>> sortedChunks, Action<uint> lineProgress)
+        {
+            uint linesCount = 0;
             using (var sw = new StreamWriter(OpenForAsyncWrite(outputFile)))
             {
-                var progress = 0;
-                var totalWork = totalLines;
-                var writerTask = Task.CompletedTask;
-
                 while (sortedChunks.Any())
                 {
-                    Console.Write("{0:f2}%   \r", (100.0 * progress) / totalWork);
-
-                    var lines = NWayMerge(sortedChunks);
-                    await writerTask;
-                    writerTask = Task.Run(async () =>
-                    {
-                        foreach (var line in lines)
-                        {
-                            await sw.WriteLineAsync(line);
-                        }
-                    });
-
-                    progress += lines.Count;
+                    await NWayMerge(sortedChunks, async line =>
+                   {
+                       await sw.WriteLineAsync(line);
+                       if (++linesCount == 1024)
+                       {
+                           lineProgress(linesCount);
+                           linesCount = 0;
+                       }
+                   });
                 }
-
-                await writerTask;
             }
+
+            lineProgress(linesCount);
         }
 
         private async Task LinesWriter(IList<string> lines, string fileName)
@@ -255,17 +339,16 @@ namespace ExternalSort
             }
         }
 
-        private List<string> NWayMerge(IDictionary<string, List<AutoFileQueue>> sortedChunks, int maxCount = 1024)
+        private async Task NWayMerge(IDictionary<string, List<AutoFileQueue>> sortedChunks, Func<string, Task> lineWriter)
         {
-            var outList = new List<string>(maxCount);
             if (sortedChunks.Count == 1)
             {
                 var singleQueue = sortedChunks.Values.First()[0];
-                for (var i = 0; i < maxCount && sortedChunks.Any(); i++)
+                while (sortedChunks.Any())
                 {
                     if (singleQueue.Any())
                     {
-                        outList.Add(singleQueue.Dequeue());
+                        await lineWriter(singleQueue.Dequeue());
                     }
                     else
                     {
@@ -273,18 +356,16 @@ namespace ExternalSort
                         sortedChunks.Clear();
                     }
                 }
-
-                return outList;
             }
 
-            for (var i = 0; i < maxCount && sortedChunks.Any(); i++)
+            while (sortedChunks.Any())
             {
                 var top = sortedChunks.First();
                 sortedChunks.Remove(top.Key);
 
                 foreach (var topValueQeue in top.Value)
                 {
-                    outList.Add(topValueQeue.Dequeue());
+                    await lineWriter(topValueQeue.Dequeue());
                     if (!topValueQeue.Any())
                     {
                         topValueQeue.Dispose();
@@ -294,8 +375,6 @@ namespace ExternalSort
                     AddToQueue(sortedChunks, topValueQeue);
                 }
             }
-
-            return outList;
         }
 
         private StreamWriter OpenForAsyncTextWrite(string fileName)

@@ -28,32 +28,40 @@ namespace ExternalSort
             _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
             _queue = new BlockingCollection<string>(maxLoadedRecords);
-            _queueLoadTask = Task.Run(async () =>
-            {
-                while (true)
-                {
-                    try
-                    {
-                        var line = await _file.ReadLineAsync();
-                        if (line != null)
-                        {
-                            _queue.Add(line);
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        _cts.Cancel();
-                        Console.WriteLine(e);
-                        throw;
-                    }
-                }
 
-                _queue.CompleteAdding();
-            });
+            // probe on non-empty
+            var fl = _file.ReadLineAsync().Result;
+            if (fl != null)
+            {
+                _queue.Add(fl);
+                _queueLoadTask = Task.Run(async () =>
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                            var line = await _file.ReadLineAsync();
+                            if (line != null)
+                            {
+                                _queue.Add(line);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            _cts.Cancel();
+                            Console.WriteLine(e);
+                            _queue.CompleteAdding();
+                            throw;
+                        }
+                    }
+
+                    _queue.CompleteAdding();
+                });
+            }
         }
 
         public void Dispose()
