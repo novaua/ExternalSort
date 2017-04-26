@@ -57,6 +57,7 @@
     <Compile Include="GenericTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="FileLinesQueueTests.cs" />
+    <Compile Include="SortSpeedTest.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj">
