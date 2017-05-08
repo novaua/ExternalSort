@@ -2,7 +2,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using Common;
@@ -99,7 +98,7 @@ namespace ExternalSort.Tests
             {
                 var lines = File.ReadAllLines(inputFile);
                 Array.Sort(lines);
-                File.WriteAllLines($"{lines}.sorted", lines);
+                File.WriteAllLines($"{inputFile}.sorted", lines);
             }
         }
 

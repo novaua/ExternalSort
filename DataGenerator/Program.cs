@@ -75,7 +75,7 @@ namespace DataGenerator
                 }
             }
 
-            Console.WriteLine("Generation file {0}", BytesFormatter.Format(outSize));
+            Console.WriteLine("Generating file {0}", BytesFormatter.Format(outSize));
 
             var appSettings = ConfigurationManager.AppSettings;
             var fullDictionary = File.ReadAllLines(appSettings["WordsFile"]);
