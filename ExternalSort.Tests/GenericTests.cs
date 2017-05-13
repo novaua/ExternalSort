@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Common;
@@ -82,6 +83,19 @@ namespace ExternalSort.Tests
 
             Assert.AreEqual("3. Apple", lines.First());
             Assert.AreEqual("End!", lines.Last());
+        }
+
+        [TestMethod]
+        public void LineSplit_Tests()
+        {
+            var line1 = "One ";
+            var line2 = "Two";
+            var lines = line1 + Environment.NewLine + line2;
+
+            var lb = Encoding.UTF8.GetBytes(lines);
+            var sr = Algorithm.EndLineSplit(lb);
+            Assert.AreEqual(line2, Encoding.UTF8.GetString(sr.Item2));
+            Assert.AreEqual(line1 + Environment.NewLine, Encoding.UTF8.GetString(sr.Item1));
         }
     }
 }

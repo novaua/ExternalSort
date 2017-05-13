@@ -45,7 +45,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Algorithm.cs" />
     <Compile Include="AutoFileQueue.cs" />
+    <Compile Include="PriorityQueue.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="LineComparer.cs" />
     <Compile Include="MergeSort.cs" />

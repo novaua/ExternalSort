@@ -60,7 +60,6 @@ namespace FileCopy
                 } while (!done);
             }
 
-
             if (!outIsFile && !Directory.Exists(outDir))
             {
                 Directory.CreateDirectory(outDir);

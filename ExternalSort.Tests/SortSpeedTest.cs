@@ -133,7 +133,7 @@ namespace ExternalSort.Tests
                             if (!eof)
                             {
                                 var rc = file.Read(buffer, 0, buffer.Length);
-                                buffer.LastOrDefault()
+                                buffer.LastOrDefault();
                             }
                         }
                     }
@@ -194,52 +194,6 @@ namespace ExternalSort.Tests
                 Array.Sort(lines);
                 File.WriteAllLines($"{inputFile}.sorted", lines);
             }
-        }
-
-        private Tuple<byte[], byte[]> EndLineSplit(byte[] buffer)
-        {
-            var endl = Environment.NewLine;
-            var endlBytes = Encoding.UTF8.GetBytes(endl);
-            var found = -1;
-            for (int i = 0; i != buffer.Length; i++)
-            {
-                var matchCount = 0;
-                for (var j = 0; j != endlBytes.Length; ++j)
-                {
-                    if (buffer[i] == endlBytes[j])
-                    {
-                        ++matchCount;
-                    }
-                    else
-                    {
-                        matchCount = 0;
-                    }
-                }
-
-                if (matchCount == endlBytes.Length)
-                {
-                    found = i - matchCount;
-                    break;
-                }
-            }
-
-            if (found >= 0)
-            {
-                if (found + endlBytes.Length == buffer.Length)
-                {
-                    return new Tuple<byte[], byte[]>(buffer, null);
-                }
-
-                var head = new byte[found + endlBytes.Length];
-                Array.Copy(buffer, 0, head, 0, head.Length);
-                var tail = new byte[buffer.Length - head.Length];
-
-                Array.Copy(buffer, found + endlBytes.Length, tail, 0, tail.Length);
-
-                return new Tuple<byte[], byte[]>(head, tail);
-            }
-
-            throw new ArgumentException("Unable to find end of line");
         }
 
         private static IOrderedEnumerable<FileInfo> GetFilesInfo()
