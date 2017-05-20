@@ -9,7 +9,7 @@ namespace ExternalSort
         public static void SplitTextFile(string baseFile, string outFileMask, long outFileSize, Action<string> outFileReady)
         {
             var maxSize = outFileSize;
-            var buffer = new byte[64 * 1024];
+            var buffer = new byte[1024];
             var blocksCount = maxSize / buffer.Length;
             var inputFileSize = new FileInfo(baseFile).Length;
             var filesCount = (inputFileSize / maxSize) + (inputFileSize % maxSize == 0 ? 0 : 1);
@@ -19,7 +19,7 @@ namespace ExternalSort
                 for (var i = 0; i < filesCount; i++)
                 {
                     var outFileName = string.Format(outFileMask, i);
-                    using (var destFile = File.OpenWrite(outFileName))
+                    using (var destFile = File.Open(outFileName, FileMode.Create, FileAccess.ReadWrite))
                     {
                         for (var j = 0; j < blocksCount; j++)
                         {
@@ -40,8 +40,10 @@ namespace ExternalSort
 
                         Console.WriteLine("End of line found at from end offset {0}", lastLinex.Item2.Length);
 
-                        file.Seek(lastLinex.Item2.Length, SeekOrigin.Current);
+                        file.Seek(-1 * lastLinex.Item2.Length, SeekOrigin.Current);
                     }
+
+                    outFileReady(outFileName);
                 }
             }
         }
