@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Common;
@@ -95,9 +92,21 @@ namespace ExternalSort.Tests
             var lines = line1 + Environment.NewLine + line2;
 
             var lb = Encoding.UTF8.GetBytes(lines);
-            var sr = Algorithm.EndLineSplit(lb);
+            var sr = Algorithm.LastEndLineSplit(lb);
             Assert.AreEqual(line2, Encoding.UTF8.GetString(sr.Item2));
             Assert.AreEqual(line1 + Environment.NewLine, Encoding.UTF8.GetString(sr.Item1));
+        }
+
+        [TestMethod]
+        public void LastLineSplit_Test()
+        {
+            var lineArray = new[] { "One", "Two", "Three" };
+            var lines = string.Join(Environment.NewLine, lineArray);
+
+            var lb = Encoding.UTF8.GetBytes(lines);
+            var sr = Algorithm.LastEndLineSplit(lb);
+            Assert.AreEqual(lineArray[0] + Environment.NewLine + lineArray[1] + Environment.NewLine, Encoding.UTF8.GetString(sr.Item1));
+            Assert.AreEqual(lineArray.Last(), Encoding.UTF8.GetString(sr.Item2));
         }
 
         [TestMethod]
@@ -106,10 +115,11 @@ namespace ExternalSort.Tests
             var maxLines = 2345;
 
             var tempFile = Path.GetTempFileName();
+
             File.WriteAllLines(tempFile, GenerateLines(maxLines));
 
             var fileLen = new FileInfo(tempFile).Length;
-            var perFile = fileLen/4;
+            var perFile = fileLen / 4;
 
             var tempRoot = Path.GetDirectoryName(tempFile);
             var mask = Path.Combine(tempRoot, "vitalys_temp_file_n{0}");
@@ -127,16 +137,25 @@ namespace ExternalSort.Tests
                 Console.WriteLine($"{file}\t{len}");
             }
 
+            Console.WriteLine($"Source file {tempFile}\t{fileLen}");
+
             Assert.AreEqual(totalLen, fileLen);
 
+            var tempFile1 = Path.GetTempFileName();
+            MergeAllFiles(outList, tempFile1);
+
+            var rl = LineByLineCompare(tempFile, tempFile1);
+            Assert.AreEqual(0, rl);
+
             outList.Add(tempFile);
+            outList.Add(tempFile1);
             foreach (var file in outList)
             {
                 File.Delete(file);
             }
         }
 
-        IEnumerable<string> GenerateLines(int count = 500)
+        private IEnumerable<string> GenerateLines(int count = 500)
         {
             var rand = new Random();
             for (int i = 0; i < count; i++)
@@ -144,6 +163,47 @@ namespace ExternalSort.Tests
                 var nextInt = rand.Next();
                 yield return $"{nextInt}. {Guid.NewGuid()}";
             }
+        }
+
+        private void MergeAllFiles(IEnumerable<string> files, string outFile)
+        {
+            using (var output = File.Create(outFile))
+            {
+                foreach (var file in files)
+                {
+                    using (var input = File.OpenRead(file))
+                    {
+                        input.CopyTo(output);
+                    }
+                }
+            }
+        }
+
+        private long LineByLineCompare(string file1, string file2)
+        {
+            var lc = 1L;
+            using (var f1s = new StreamReader(file1))
+            using (var f2s = new StreamReader(file2))
+            {
+                do
+                {
+                    var l1 = f1s.ReadLine();
+                    var l2 = f2s.ReadLine();
+                    if (l1 == null || l2 == null)
+                    {
+                        break;
+                    }
+
+                    if (l2 != l1)
+                    {
+                        return lc;
+                    }
+                    ++lc;
+                } while (true);
+            }
+
+            Console.WriteLine($"All {lc} lies compared.");
+            return 0;
         }
     }
 }

@@ -10,37 +10,56 @@ namespace ExternalSort
         {
             var maxSize = outFileSize;
             var buffer = new byte[1024];
-            var blocksCount = maxSize / buffer.Length;
+
             var inputFileSize = new FileInfo(baseFile).Length;
             var filesCount = (inputFileSize / maxSize) + (inputFileSize % maxSize == 0 ? 0 : 1);
 
+            var blocksCount = maxSize / buffer.Length + (maxSize % buffer.Length == 0 ? 0 : 1);
+
             using (var file = File.OpenRead(baseFile))
             {
+                var allRead = false;
                 for (var i = 0; i < filesCount; i++)
                 {
+                    if (allRead)
+                    {
+                        break;
+                    }
+
                     var outFileName = string.Format(outFileMask, i);
                     using (var destFile = File.Open(outFileName, FileMode.Create, FileAccess.ReadWrite))
                     {
-                        for (var j = 0; j < blocksCount; j++)
+                        for (var j = 0; j < blocksCount && !allRead; j++)
                         {
                             var rc = file.Read(buffer, 0, buffer.Length);
-                            destFile.Write(buffer, 0, rc);
+                            if (rc > 0)
+                            {
+                                destFile.Write(buffer, 0, rc);
+                            }
+                            else
+                            {
+                                allRead = true;
+                            }
                         }
 
-                        var splitBuffer = destFile.Length < buffer.Length
-                            ? new byte[destFile.Length]
-                            : buffer;
+                        if (!allRead)
+                        {
+                            var splitBuffer = destFile.Length < buffer.Length
+                                ? new byte[destFile.Length]
+                                : buffer;
 
-                        destFile.Seek(splitBuffer.Length, SeekOrigin.End);
-                        destFile.Read(splitBuffer, 0, splitBuffer.Length);
-                        destFile.SetLength(destFile.Length - splitBuffer.Length);
+                            destFile.Seek(splitBuffer.Length, SeekOrigin.End);
+                            destFile.Read(splitBuffer, 0, splitBuffer.Length);
+                            destFile.SetLength(destFile.Length - splitBuffer.Length);
 
-                        var lastLinex = EndLineSplit(splitBuffer);
-                        destFile.Write(lastLinex.Item1, 0, lastLinex.Item1.Length);
+                            var lastLinex = LastEndLineSplit(splitBuffer);
+                            destFile.Write(lastLinex.Item1, 0, lastLinex.Item1.Length);
 
-                        Console.WriteLine("End of line found at from end offset {0}", lastLinex.Item2.Length);
+                            Console.WriteLine("End of line found at from end offset {0}", lastLinex.Item2.Length);
 
-                        file.Seek(-1 * lastLinex.Item2.Length, SeekOrigin.Current);
+                            file.Seek(-1 * lastLinex.Item2.Length, SeekOrigin.Current);
+                            allRead = false;
+                        }
                     }
 
                     outFileReady(outFileName);
@@ -48,50 +67,25 @@ namespace ExternalSort
             }
         }
 
-        public static Tuple<byte[], byte[]> EndLineSplit(byte[] buffer)
+        /// <summary>
+        /// This is not super efficient but simple coding and good for moderate size of input.
+        /// </summary>
+        /// <param name="buffer"></param>
+        /// <returns></returns>
+        public static Tuple<byte[], byte[]> LastEndLineSplit(byte[] buffer)
         {
             var endl = Environment.NewLine;
-            var endlBytes = Encoding.UTF8.GetBytes(endl);
-            var found = -1;
-            for (var i = 0; i != buffer.Length; i++)
-            {
-                var matchCount = 0;
-                for (var j = 0; j != endlBytes.Length && i + endlBytes.Length < buffer.Length; ++j)
-                {
-                    if (buffer[i + j] == endlBytes[j])
-                    {
-                        ++matchCount;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
 
-                if (matchCount == endlBytes.Length)
-                {
-                    found = i;
-                    break;
-                }
+            var stringBuffer = Encoding.UTF8.GetString(buffer);
+            var endlPos = stringBuffer.LastIndexOf(endl, StringComparison.InvariantCulture);
+            if (endlPos == -1)
+            {
+                throw new ArgumentException("End line was not found. The input is not a text!");
             }
 
-            if (found >= 0)
-            {
-                if (found + endlBytes.Length == buffer.Length)
-                {
-                    return new Tuple<byte[], byte[]>(buffer, null);
-                }
-
-                var head = new byte[found + endlBytes.Length];
-                Array.Copy(buffer, 0, head, 0, head.Length);
-                var tail = new byte[buffer.Length - head.Length];
-
-                Array.Copy(buffer, found + endlBytes.Length, tail, 0, tail.Length);
-
-                return new Tuple<byte[], byte[]>(head, tail);
-            }
-
-            throw new ArgumentException("Unable to find end of line");
+            var head = stringBuffer.Substring(0, endlPos + endl.Length);
+            var tail = stringBuffer.Substring(endlPos + endl.Length);
+            return new Tuple<byte[], byte[]>(Encoding.UTF8.GetBytes(head), Encoding.UTF8.GetBytes(tail));
         }
     }
 }
