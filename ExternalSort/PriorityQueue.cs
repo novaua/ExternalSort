@@ -1,17 +1,24 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Security.Cryptography.X509Certificates;
 
 namespace ExternalSort
 {
     public class PriorityQueue<T> where T : IComparable<T>
     {
+        private readonly IComparer<T> _comparer;
         private readonly List<T> _data;
 
         public PriorityQueue()
         {
+            _comparer = Comparer<T>.Default;
+            _data = new List<T>();
+        }
+
+        public PriorityQueue(IComparer<T> comparer)
+        {
+            _comparer = comparer;
             _data = new List<T>();
         }
 
@@ -30,7 +37,7 @@ namespace ExternalSort
             while (ci > 0)
             {
                 var pi = (ci - 1) / 2;
-                if (_data[ci].CompareTo(_data[pi]) >= 0)
+                if (_comparer.Compare(_data[ci], _data[pi]) >= 0)
                 {
                     break;
                 }
