@@ -1,4 +1,5 @@
 ﻿using System;
+using Common;
 
 namespace ExternalSort
 {
@@ -17,6 +18,8 @@ namespace ExternalSort
             OrdinalStringSortOrder = false;
 
             DeflateTempFiles = true;
+
+            MaxTempFileSize = 100L * Constants.Mb;
         }
 
         public ulong MaxMemoryUsageBytes { get; set; }
@@ -28,5 +31,7 @@ namespace ExternalSort
         public bool OrdinalStringSortOrder { get; set; }
 
         public bool DeflateTempFiles { get; set; }
+
+        public long MaxTempFileSize { get; set; }
     }
 }

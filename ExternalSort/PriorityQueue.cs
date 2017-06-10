@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 
 namespace ExternalSort
 {
-    public class PriorityQueue<T> where T : IComparable<T>
+    public class PriorityQueue<T>: IPriorityQueue<T> where T : IComparable<T>
     {
         private readonly IComparer<T> _comparer;
         private readonly List<T> _data;
