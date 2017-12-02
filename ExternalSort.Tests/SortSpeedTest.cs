@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
@@ -102,48 +103,6 @@ namespace ExternalSort.Tests
                 MaxDegreeOfParallelism = 2
             };
 
-            var spliter = new TransformBlock<Tuple<string, long>, BufferBlock<string>>(bigInputFile =>
-            {
-                var maxSize = bigInputFile.Item2;
-                var buffer = new byte[64 * 1024];
-                var blocksCount = maxSize / buffer.Length;
-                var inputFileSize = new FileInfo(bigInputFile.Item1).Length;
-                var filesCount = (inputFileSize / maxSize) + (inputFileSize % maxSize == 0 ? 0 : 1);
-
-                using (var file = File.OpenRead(bigInputFile.Item1))
-                {
-                    for (int i = 0; i < filesCount; i++)
-                    {
-                        using (var destFile = File.OpenWrite($"{bigInputFile.Item1}.{i}.split"))
-                        {
-                            bool eof = false;
-                            for (int j = 0; j < blocksCount - 1; j++)
-                            {
-                                var rc = file.Read(buffer, 0, buffer.Length);
-                                if (rc == 0)
-                                {
-                                    eof = true;
-                                }
-                                else
-                                {
-                                    destFile.Write(buffer, 0, rc);
-                                }
-                            }
-
-                            if (!eof)
-                            {
-                                var rc = file.Read(buffer, 0, buffer.Length);
-                                buffer.LastOrDefault();
-                            }
-                        }
-                    }
-
-                    var output = new BufferBlock<string>();
-
-                    return output;
-                }
-            });
-
             var reader = new TransformBlock<string, Tuple<string, string[]>>(inputFile =>
                 {
                     var lines = File.ReadAllLines(inputFile);
@@ -165,6 +124,10 @@ namespace ExternalSort.Tests
                 iOparallel);
 
             var pc = new DataflowLinkOptions { PropagateCompletion = true };
+            var bufferBlock = new BufferBlock<string>();
+            var producer = Task.Run(() => Spliter("", 10L * Constants.Gb, bufferBlock));
+   
+            bufferBlock.LinkTo(reader, pc);
             reader.LinkTo(sorter, pc);
             sorter.LinkTo(writer, pc);
 
@@ -188,7 +151,8 @@ namespace ExternalSort.Tests
                 throw new ArgumentException($"File '{inputFile}' does not exist!");
             }
 
-            using (var asw = new AutoStopwatch($"Sorting file '{inputFile}' {BytesFormatter.Format(fi.Length)} ", fi.Length))
+            using (var asw = new AutoStopwatch($"Sorting file '{inputFile}' {BytesFormatter.Format(fi.Length)} ",
+                fi.Length))
             {
                 var lines = File.ReadAllLines(inputFile);
                 Array.Sort(lines);
@@ -204,6 +168,16 @@ namespace ExternalSort.Tests
                 .Select(x => new FileInfo(x))
                 .OrderBy(x => x.Length);
             return toSorFileInfo;
+        }
+
+        private void Spliter(string inputFile, long maxSize, ITargetBlock<string> outputFiles)
+        {
+            var inputFileSize = new FileInfo(inputFile).Length;
+            var filesCount = (inputFileSize / maxSize) + (inputFileSize % maxSize == 0 ? 0 : 1);
+
+            var fileMask = $"{inputFile}.{0}.split";
+            
+            Algorithm.SplitTextFile(inputFile, fileMask, maxSize, x => outputFiles.Post(x));
         }
     }
 }
