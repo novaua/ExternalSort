@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using Common;
@@ -100,7 +97,7 @@ namespace ExternalSort.Tests
 
             var iOparallel = new ExecutionDataflowBlockOptions
             {
-                MaxDegreeOfParallelism = 2
+                MaxDegreeOfParallelism = 4
             };
 
             var reader = new TransformBlock<string, Tuple<string, string[]>>(inputFile =>
