@@ -1,36 +1,34 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ExternalSort
 {
-    public class PriorityQueue<T> where T : IComparable<T>
+    public class PriorityQueue<TKey, TValue> where TKey : IComparable<TKey>
     {
-        private readonly List<T> _data;
+        private readonly List<KeyValuePair<TKey, TValue>> _data;
 
         public PriorityQueue()
         {
-            _data = new List<T>();
+            _data = new List<KeyValuePair<TKey, TValue>>();
         }
 
         public int Count => _data.Count;
 
-        public T Peek()
+        public KeyValuePair<TKey, TValue> Peek()
         {
             var frontItem = _data[0];
             return frontItem;
         }
 
-        public void Enqueue(T item)
+        public void Enqueue(TKey key, TValue value)
         {
-            _data.Add(item);
+            _data.Add(new KeyValuePair<TKey, TValue>(key, value));
             var ci = _data.Count - 1;
             while (ci > 0)
             {
                 var pi = (ci - 1) / 2;
-                if (_data[ci].CompareTo(_data[pi]) >= 0)
+                if (_data[ci].Key.CompareTo(_data[pi].Key) >= 0)
                 {
                     break;
                 }
@@ -40,7 +38,7 @@ namespace ExternalSort
             }
         }
 
-        public T Dequeue()
+        public KeyValuePair<TKey, TValue> Dequeue()
         {
             if (!_data.Any())
             {
@@ -64,12 +62,12 @@ namespace ExternalSort
                 }
 
                 var rc = ci + 1;
-                if (rc <= li && _data[rc].CompareTo(_data[ci]) < 0)
+                if (rc <= li && _data[rc].Key.CompareTo(_data[ci].Key) < 0)
                 {
                     ci = rc;
                 }
 
-                if (_data[pi].CompareTo(_data[ci]) <= 0)
+                if (_data[pi].Key.CompareTo(_data[ci].Key) <= 0)
                 {
                     break;
                 }
