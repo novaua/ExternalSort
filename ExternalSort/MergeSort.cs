@@ -45,9 +45,16 @@ namespace ExternalSort
             var asw = new AutoStopwatch("Total work", _inputFileLength);
             var splitedFiles = new BufferBlock<string>();
 
-            var spliter = Task.Run(() => SplitToFiles(inputFile, splitedFiles))
-                .ContinueWith(a => splitedFiles.Complete(),
-                TaskContinuationOptions.NotOnRanToCompletion);
+            var producedFiles = 0;
+            var spliter = Task.Run(() => SplitToFiles(inputFile, newFile =>
+                {
+                    splitedFiles.Post(newFile);
+                    ++producedFiles;
+                })).ContinueWith(a =>
+                {
+                    splitedFiles.Complete();
+                },
+                TaskContinuationOptions.AttachedToParent);
 
             var parallel = new ExecutionDataflowBlockOptions
             {
@@ -87,7 +94,7 @@ namespace ExternalSort
             reader.LinkTo(sorter, pc);
             sorter.LinkTo(writer, pc);
 
-            var maxBatchSize = 8;
+            var maxBatchSize = 2;
 
             var sortedFilesFlow = new BatchBlock<string>(maxBatchSize);
             writer.LinkTo(sortedFilesFlow);
@@ -112,7 +119,7 @@ namespace ExternalSort
                 {
                     Interlocked.Add(ref totalLinesWriten, p);
                 });
-
+                
                 foreach (var file in x)
                 {
                     File.Delete(file);
@@ -133,13 +140,13 @@ namespace ExternalSort
             });
         }
 
-        private void SplitToFiles(string bigFile, BufferBlock<string> tempFiles)
+        private void SplitToFiles(string bigFile, Action<string> onNewFile)
         {
             var maxSize = Settings.MaxTempFileSize;
             var tempRoot = Path.GetDirectoryName(Path.GetTempFileName());
             var mask = Path.Combine(tempRoot, "mergeSortTempFileNo_{0}");
 
-            Algorithm.SplitTextFile(bigFile, mask, maxSize, newFile => tempFiles.Post(newFile));
+            Algorithm.SplitTextFile(bigFile, mask, maxSize, onNewFile);
         }
 
         private int Comparator(string x, string y)
