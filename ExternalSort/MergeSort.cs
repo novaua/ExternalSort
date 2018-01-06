@@ -42,102 +42,116 @@ namespace ExternalSort
         {
             var inputFileLength = new FileInfo(inputFile).Length;
             _inputFileLength = inputFileLength;
-            var asw = new AutoStopwatch("Total work", _inputFileLength);
-            var splitedFiles = new BufferBlock<string>();
+            using (var asw = new AutoStopwatch("Total work", _inputFileLength))
+            {
+                var splitedFiles = new BufferBlock<string>();
 
-            var producedFiles = 0;
-            var spliter = Task.Run(() => SplitToFiles(inputFile, newFile =>
+                var producedFiles = 0;
+                var spliter = Task.Run(() => SplitToFiles(inputFile, newFile =>
                 {
                     splitedFiles.Post(newFile);
                     ++producedFiles;
                 })).ContinueWith(a =>
                 {
+                    Console.WriteLine($"Total produced files: {producedFiles}");
                     splitedFiles.Complete();
                 },
-                TaskContinuationOptions.AttachedToParent);
+                    TaskContinuationOptions.AttachedToParent);
 
-            var parallel = new ExecutionDataflowBlockOptions
-            {
-                MaxDegreeOfParallelism = Settings.MaxThreads
-            };
-
-            var iOparallel = new ExecutionDataflowBlockOptions
-            {
-                MaxDegreeOfParallelism = 2
-            };
-
-            var reader = new TransformBlock<string, Tuple<string, string[]>>(file =>
-            {
-                var lines = File.ReadAllLines(file);
-                return new Tuple<string, string[]>(file, lines);
-            },
-             iOparallel);
-
-            var sorter = new TransformBlock<Tuple<string, string[]>, Tuple<string, string[]>>(x =>
-            {
-                Array.Sort(x.Item2);
-                return new Tuple<string, string[]>($"{x.Item1}.sorted", x.Item2);
-            },
-            parallel);
-
-            var writer = new TransformBlock<Tuple<string, string[]>, string>(x =>
-            {
-                File.WriteAllLines(x.Item1, x.Item2);
-                return x.Item1;
-            },
-            iOparallel);
-
-            var pc = new DataflowLinkOptions { PropagateCompletion = true };
-
-            splitedFiles.LinkTo(reader, pc);
-
-            reader.LinkTo(sorter, pc);
-            sorter.LinkTo(writer, pc);
-
-            var maxBatchSize = 2;
-
-            var sortedFilesFlow = new BatchBlock<string>(maxBatchSize);
-            writer.LinkTo(sortedFilesFlow);
-
-            var totalLinesWriten = 0L;
-            var processingCount = 0;
-
-            var filesMerger = new TransformBlock<string[], string>(x =>
-            {
-                string newOutFile;
-                Interlocked.Add(ref processingCount, x.Length);
-
-                var parent = Path.GetDirectoryName(x[0]);
-
-                do
+                var parallel = new ExecutionDataflowBlockOptions
                 {
-                    newOutFile = Path.Combine(parent, Path.GetRandomFileName());
-                } while (File.Exists(newOutFile));
+                    MaxDegreeOfParallelism = Settings.MaxThreads
+                };
 
-                var mrg = new NWayMerger();
-                mrg.MergeFiles(x, newOutFile, OpenForAsyncTextRead, OpenForAsyncWrite, p =>
+                var iOparallel = new ExecutionDataflowBlockOptions
                 {
-                    Interlocked.Add(ref totalLinesWriten, p);
+                    MaxDegreeOfParallelism = 1
+                };
+
+                var reader = new TransformBlock<string, Tuple<string, string[]>>(file =>
+                {
+                    var lines = File.ReadAllLines(file);
+                    return new Tuple<string, string[]>(file, lines);
+                },
+                 iOparallel);
+
+                var sorter = new TransformBlock<Tuple<string, string[]>, Tuple<string, string[]>>(x =>
+                {
+                    Array.Sort(x.Item2);
+                    return new Tuple<string, string[]>($"{x.Item1}.sorted", x.Item2);
+                },
+                parallel);
+
+                var writer = new TransformBlock<Tuple<string, string[]>, string>(x =>
+                {
+                    File.WriteAllLines(x.Item1, x.Item2);
+                    return x.Item1;
+                },
+                iOparallel);
+
+                var pc = new DataflowLinkOptions { PropagateCompletion = true };
+
+                splitedFiles.LinkTo(reader, pc);
+
+                reader.LinkTo(sorter, pc);
+                sorter.LinkTo(writer, pc);
+
+                var maxBatchSize = 2;
+
+                var sortedFilesFlow = new BatchBlock<string>(maxBatchSize);
+                writer.LinkTo(sortedFilesFlow);
+
+                var totalLinesWriten = 0L;
+                var processedCount = 0;
+
+                var filesMerger = new TransformBlock<string[], string>(x =>
+                {
+                    string newOutFile;
+                    var parent = Path.GetDirectoryName(x[0]);
+
+                    do
+                    {
+                        newOutFile = Path.Combine(parent, Path.GetRandomFileName());
+                    } while (File.Exists(newOutFile));
+
+                    var mrg = new NWayMerger();
+                    mrg.MergeFiles(x, newOutFile, OpenForAsyncTextRead, OpenForAsyncWrite, p =>
+                    {
+                        Interlocked.Add(ref totalLinesWriten, p);
+                    });
+
+                    foreach (var file in x)
+                    {
+                        File.Delete(file);
+                    }
+
+                    Interlocked.Add(ref processedCount, x.Length - 1);
+                    Console.WriteLine("{0} lines written to {1} from sources {2}", totalLinesWriten, newOutFile, string.Join(", ", x));
+                    return newOutFile;
                 });
-                
-                foreach (var file in x)
+
+                sortedFilesFlow.LinkTo(filesMerger, pc);
+
+                var repeter = new ActionBlock<string>(file =>
                 {
-                    File.Delete(file);
-                }
+                    if (Interlocked.Add(ref processedCount, 0) > 1)
+                    {
+                        sortedFilesFlow.Post(file);
+                    }
+                    else
+                    {
+                        sortedFilesFlow.Complete();
+                        File.Move(file, outputFile);
+                    }
+                });
 
-                Console.WriteLine("{0} lines written to {1}", totalLinesWriten, newOutFile);
-                return newOutFile;
-            });
+                filesMerger.LinkTo(repeter, pc);
 
-            sortedFilesFlow.LinkTo(filesMerger);
+                await Task.WhenAll(spliter, writer.Completion, sorter.Completion, splitedFiles.Completion);
 
-            var repeater = new ActionBlock<string>(x =>
-            {
-                if (writer.Completion.IsCompleted && sortedFilesFlow.OutputCount == 0)
-                {
-                    // This is todo!
-                }
-            });
+                Console.WriteLine($"Split to {producedFiles} files completed.");
+                await Task.WhenAll(repeter.Completion, filesMerger.Completion, sortedFilesFlow.Completion);
+            }
         }
 
         private void SplitToFiles(string bigFile, Action<string> onNewFile)
