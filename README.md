@@ -1,14 +1,14 @@
 # External Sort
 Primer for generation of a huge file of random words and sorting using Merge Sort algorithm. The primer uses TPL multithreading and asynchronous IO where possible. This is not supper speedy yet, but has to work as expected.
 
-Use folloiwng command to genearte big file.
+Use the 'DataGenerator.exe' command to genearate a big file of a default size.
 ```
 PS L:\work\ExternalSort-master\bin\Debug> .\DataGenerator.exe
 Generation file 1 MB
 File 'out.txt' of total 34049 lines of size 1 MB generated
 Test file generation of 1 MB took : 0.07 s, speed 13,62 MB/s
 ```
-
+It's possible to specify output file and maximum size in MB or GB, use '--help' or '/h' for more details. 
 The output file now looks like
 ```
 1. hodge
@@ -22,12 +22,12 @@ The output file now looks like
 <...>
 ```
 
-The format of the file is 
+The format of the file is a dot separated pair of number and characters string:
 ```
   <number>. <One or more words>
 ```
-The words are taken from DataGenerator\Resources\words.txt which is an list of Eglish words found in the internet.
-To sort the 'out.txt' file ExternalSort.exe may be used. It support '--help' which makes usage evident.
+The words are randomly taken from DataGenerator\Resources\words.txt which is an list of Eglish words found in the internet.
+To sort the 'out.txt' file ExternalSort.exe may be used. It supports '--help' which makes usage evident.
 ```
 PS L:\work\ExternalSort-master\bin\Debug> .\ExternalSort.exe --help
 Big files sorting tool
@@ -44,7 +44,7 @@ Merge sort compressed files  of 464,48 KB took : 0.03 s, speed 13,01 MB/s
 Merge sort input of 1 MB took : 0.03 s, speed 28,63 MB/s
 Total work of 1 MB took : 3.56 s, speed 287,71 KB/s
 ```
-Oh it works! If we look ito the output file it may look like
+It works, so far so good. If we look ito the output file it may look like
 ```
 14261. 'em
 11021. 'mid
@@ -61,5 +61,5 @@ Oh it works! If we look ito the output file it may look like
 15637. abandonee birdhouse
 <...>
 ```
-The output text in file now is sorted alphabetically first by the second column of words then by number or words id. 
+The output text in file now is sorted alphabetically first by the second column of the words then by number or the words id. 
 Thanks for reading and happy hacking!
