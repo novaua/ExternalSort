@@ -28,7 +28,7 @@ namespace ExternalSort.Tests
             var exepectedCount = 7;
 
             var count = 0;
-            _countedList.MaxIntemsReached = (l, ic) =>
+            _countedList.MaxIntemReached = (l, ic) =>
             {
                 Assert.IsTrue(ic <= DefaultCount * 4);
                 ++count;

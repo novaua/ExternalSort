@@ -12,9 +12,10 @@ namespace ExternalSort
             if (args.Any() && helpVariant.Contains(args[0], StringComparer.OrdinalIgnoreCase))
             {
                 Console.WriteLine("Big files sorting tool" + Environment.NewLine +
-                                  "\tUsage ExternalSort <input file> <output file> [/ord[inal]]" + Environment.NewLine +
+                                  "\tUsage ExternalSort <input file> <output file> [/ord[inal]] [/s]" + Environment.NewLine +
                                   "\tExample: " + Environment.NewLine +
-                                  "\tExternalSort.exe in.txt outSorted.txt" + Environment.NewLine);
+                                  "\tExternalSort.exe in.txt outSorted.txt" + Environment.NewLine +
+                                  "/s - single threaded");
                 return;
             }
 

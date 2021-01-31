@@ -3,6 +3,9 @@ using System.Collections.Generic;
 
 namespace ExternalSort
 {
+    /// <summary>
+    /// Invokes MaxitemReached action passing tha current list and creates a new list
+    /// </summary>
     public sealed class CountedList : IDisposable
     {
         private const int DefaultCapacity = 1024;
@@ -15,7 +18,7 @@ namespace ExternalSort
             TotalItems = 0;
         }
 
-        public Action<List<string>, ulong> MaxIntemsReached;
+        public Action<List<string>, ulong> MaxIntemReached;
 
         public void Add(string item)
         {
@@ -24,7 +27,7 @@ namespace ExternalSort
             TotalItems += (ulong)item.Length;
             if (TotalItems >= _maxItems)
             {
-                MaxIntemsReached?.Invoke(_innerList, TotalItems);
+                MaxIntemReached?.Invoke(_innerList, TotalItems);
                 _innerList = new List<string>(DefaultCapacity);
                 TotalItems = 0;
             }
@@ -36,7 +39,7 @@ namespace ExternalSort
         {
             if (TotalItems != 0)
             {
-                MaxIntemsReached?.Invoke(_innerList, TotalItems);
+                MaxIntemReached?.Invoke(_innerList, TotalItems);
                 TotalItems = 0;
             }
         }

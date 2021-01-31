@@ -67,7 +67,8 @@ namespace ExternalSort
 
         private void WaitQueueLoaded()
         {
-            if (_queueLoadTask != null && !_disposed)
+            Debug.Assert(!_disposed, "premature disposed");
+            if (_queueLoadTask != null)
             {
                 _queueLoadTask.Wait();
                 _queueLoadTask.Dispose();
@@ -78,15 +79,12 @@ namespace ExternalSort
         private void StartLoadQueueFromFile()
         {
             Debug.Assert(_queueLoadTask == null, "Sanity check");
+            // ToDo: probably simplify
             _queueLoadTask = Task.Run(async () =>
             {
-                var done = await LoadQueue(_queue,
+                await LoadQueue(_queue,
                     _file,
-                    _maxLoadedRecords);
-                if (done)
-                {
-                    Dispose();
-                }
+                    _maxLoadedRecords).ConfigureAwait(false);
             });
         }
 
@@ -97,22 +95,18 @@ namespace ExternalSort
         /// <param name="file"></param>
         /// <param name="records"></param>
         /// <returns>true when done</returns>
-        static async Task<bool> LoadQueue(Queue<string> queue, StreamReader file, int records)
+        static async Task LoadQueue(Queue<string> queue, StreamReader file, int records)
         {
             for (var i = 0; i < records; i++)
             {
-                var line = await file.ReadLineAsync();
-                if (line != null)
+                var line = await file.ReadLineAsync().ConfigureAwait(false);
+                if (line == null)
                 {
-                    queue.Enqueue(line);
+                    break;
                 }
-                else
-                {
-                    return true;
-                }
-            }
 
-            return false;
+                queue.Enqueue(line);
+            }
         }
     }
 }

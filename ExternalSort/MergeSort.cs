@@ -98,7 +98,7 @@ namespace ExternalSort
                     {
                         foreach (var line in lines)
                         {
-                            await sw.WriteLineAsync(line);
+                            await sw.WriteLineAsync(line).ConfigureAwait(false);
                         }
                     });
 
@@ -175,7 +175,7 @@ namespace ExternalSort
 
                 using (var countedList = new CountedList(Settings.MaxMemoryUsageBytes / (uint)(2 * Settings.MaxThreads)))
                 {
-                    countedList.MaxIntemsReached += (fullList, bytesCount) =>
+                    countedList.MaxIntemReached += (fullList, bytesCount) =>
                     {
                         var tempFileName = Path.Combine(tempLocationPath, Path.GetRandomFileName());
                         var job = new Tuple<string, List<string>>(tempFileName, fullList);
@@ -189,7 +189,7 @@ namespace ExternalSort
                         var done = false;
                         while (!done)
                         {
-                            var res = await ReadLines(inputStream);
+                            var res = await ReadLines(inputStream).ConfigureAwait(false);
                             var lines = res.Item1;
                             done = res.Item2;
 
@@ -205,7 +205,7 @@ namespace ExternalSort
 
                 unsortedQueue.CompleteAdding();
                 Console.Write("Read complete");
-                await Task.WhenAll(sortAndWriteTasks);
+                await Task.WhenAll(sortAndWriteTasks).ConfigureAwait(false);
 
                 if (lineCount > 0)
                 {
@@ -227,7 +227,7 @@ namespace ExternalSort
             var done = false;
             for (int i = 0; i < maxCount; i++)
             {
-                var line = await reader.ReadLineAsync();
+                var line = await reader.ReadLineAsync().ConfigureAwait(false);
                 if (line != null)
                 {
                     result.Add(line);

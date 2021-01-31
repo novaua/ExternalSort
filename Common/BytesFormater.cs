@@ -4,8 +4,7 @@ namespace Common
 {
     public static class BytesFormatter
     {
-        private const int KB = 1024;
-
+        
         public static string Format(ulong bytes)
         {
             return Format((long)bytes);
@@ -19,9 +18,9 @@ namespace Common
             var order = orders.Length - 1;
             var printValue = (double)bytes;
 
-            while (printValue >= KB && order > 0)
+            while (printValue >= Constants.KB && order > 0)
             {
-                printValue /= KB;
+                printValue /= Constants.KB;
                 --order;
             }
 
